@@ -1,0 +1,65 @@
+# Ruff configuration for DataPlatform
+# https://docs.astral.sh/ruff/configuration/
+
+# Exclude directories
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "*.pyc",
+    ".pytest_cache",
+    "data/",
+    "notebooks/",
+    ".terraform",
+    "infrastructure/terraform/.terraform",
+]
+
+# Python version
+target-version = "py311"
+
+# Line length
+line-length = 100
+
+[lint]
+# Enable specific rule sets
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "PIE", # flake8-pie
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # Line too long (handled by formatter)
+    "E402",   # Module level import not at top (needed for sys.path.insert)
+    "B007",   # Loop variable not used within loop body
+    "B008",   # Do not perform function call in argument defaults
+    "B905",   # zip() without strict parameter (backward compatibility)
+    "N802",   # Function name should be lowercase (we use UPPERCASE for settings properties)
+    "N803",   # Argument name should be lowercase (for DataFrame conventions)
+    "N806",   # Variable in function should be lowercase (for DataFrame conventions)
+]
+
+# Allow autofix for all enabled rules
+fixable = ["ALL"]
+unfixable = []
+
+[format]
+# Use double quotes for strings
+quote-style = "double"
+
+# Indent with spaces (4 spaces per indent level)
+indent-style = "space"
+
+# Respect magic trailing comma
+skip-magic-trailing-comma = false
+
+# Automatically detect line endings
+line-ending = "auto"

@@ -1,0 +1,45 @@
+# Streaming Service Configuration
+# Public config - safe to commit to git
+#
+# Choose streaming backend via CLOUD_PROVIDER in .env:
+#   - CLOUD_PROVIDER=opensource → Use Kafka
+#   - CLOUD_PROVIDER=aws/localstack → Use Kinesis
+
+# ============================================
+# KAFKA (Open-source, Production-ready)
+# ============================================
+kafka:
+  # Connection
+  # Use 'localhost:9094' when running on host (EXTERNAL listener)
+  # Use 'kafka:9092' when running inside Docker container (INTERNAL listener)
+  bootstrap_servers: localhost:9094
+
+  # Topics
+  topics:
+    market_trades: market-trades
+    order_books: order-books
+
+  # Retention & Performance
+  retention_hours: 24
+  num_partitions: 3
+  replication_factor: 1  # Single node for local dev
+
+  # Producer settings
+  compression_type: gzip
+  acks: all  # Wait for all replicas
+  max_request_size_mb: 1
+
+# ============================================
+# KINESIS (AWS - for cloud deployment)
+# ============================================
+kinesis:
+  # Stream names
+  streams:
+    market_trades: market-trades-local
+    order_books: order-books-local
+
+  # Retention
+  retention_hours: 24
+
+  # Sharding (Phase 6 - production)
+  shard_count: 3

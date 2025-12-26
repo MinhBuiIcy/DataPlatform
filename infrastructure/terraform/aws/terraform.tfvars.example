@@ -1,0 +1,25 @@
+# ============================================
+# TERRAFORM VARIABLES - EXAMPLE
+# Copy this file to terraform.tfvars or create environment-specific files
+# ============================================
+
+# Environment Configuration
+environment  = "local"  # local, dev, staging, production
+project_name = "AlgoTrading"
+
+# AWS Configuration
+aws_region            = "us-east-1"
+aws_access_key_id     = "test"  # Use real credentials for AWS
+aws_secret_access_key = "test"  # Use real credentials for AWS
+
+# LocalStack Endpoint (empty for real AWS)
+localstack_endpoint = "http://localhost:4566"  # Set to "" for real AWS
+
+# Kinesis Configuration
+kinesis_shard_count     = 1   # 1 for local, 3-5 for production
+kinesis_retention_hours = 24  # 24-168 hours
+
+# S3 Configuration
+enable_s3_versioning = false  # true for production
+s3_lifecycle_enabled = false  # true for production cost optimization
+s3_lifecycle_days    = 90     # Days before moving to cheaper storage

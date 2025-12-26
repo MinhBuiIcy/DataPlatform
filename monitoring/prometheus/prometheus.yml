@@ -1,0 +1,110 @@
+# ============================================
+# PROMETHEUS CONFIGURATION
+# Trading Platform - Metrics Collection
+# ============================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    environment: 'local'
+    project: 'trading-platform'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files (for alerts and recording rules)
+rule_files:
+  # - "alerts/*.yml"
+  # - "rules/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # ============================================
+  # Prometheus itself
+  # ============================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+
+  # ============================================
+  # ClickHouse Metrics
+  # ============================================
+  - job_name: 'clickhouse'
+    static_configs:
+      - targets: ['clickhouse:8123']
+        labels:
+          service: 'clickhouse'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # ============================================
+  # Redis Metrics (via redis_exporter)
+  # Note: Requires redis_exporter to be added to docker-compose
+  # ============================================
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis-exporter:9121']
+  #       labels:
+  #         service: 'redis'
+
+  # ============================================
+  # PostgreSQL Metrics (via postgres_exporter)
+  # Note: Requires postgres_exporter to be added to docker-compose
+  # ============================================
+  # - job_name: 'postgres'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         service: 'postgres'
+
+  # ============================================
+  # Python Application Metrics
+  # Scrape from custom Python services (Phase 2+)
+  # ============================================
+  - job_name: 'trading-services'
+    static_configs:
+      # Market data ingestion service
+      - targets: ['market-data-service:8000']
+        labels:
+          service: 'market-data-ingestion'
+
+      # Strategy execution service
+      - targets: ['strategy-service:8001']
+        labels:
+          service: 'strategy-execution'
+
+      # Order management service
+      - targets: ['order-service:8002']
+        labels:
+          service: 'order-management'
+
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # ============================================
+  # Docker Container Metrics (via cAdvisor)
+  # Note: Requires cAdvisor to be added to docker-compose
+  # ============================================
+  # - job_name: 'cadvisor'
+  #   static_configs:
+  #     - targets: ['cadvisor:8080']
+  #       labels:
+  #         service: 'cadvisor'
+  #   scrape_interval: 30s
+
+  # ============================================
+  # Node Exporter (host machine metrics)
+  # Note: Requires node_exporter to be added
+  # ============================================
+  # - job_name: 'node'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+  #       labels:
+  #         service: 'node-exporter'

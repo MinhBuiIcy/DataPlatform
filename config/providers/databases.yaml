@@ -1,0 +1,62 @@
+# Database Service Configuration
+# Public config - safe to commit to git
+# Passwords are in .env (gitignored)
+
+# ============================================
+# CLICKHOUSE - Time-Series OLAP Database
+# ============================================
+clickhouse:
+  # Connection
+  # Use 'localhost' when running on host
+  # Use 'clickhouse' when running inside Docker container
+  host: localhost
+  port: 9000  # Native protocol
+  http_port: 8123  # HTTP interface
+
+  # Database
+  database: trading
+  user: trading_user
+  # password: Set via CLICKHOUSE_PASSWORD in .env
+
+  # Performance
+  max_threads: 4
+  max_memory_usage_gb: 2
+
+# ============================================
+# POSTGRESQL - Relational Database
+# ============================================
+postgres:
+  # Connection
+  # Use 'localhost:5433' when running on host (mapped port)
+  # Use 'postgres:5432' when running inside Docker container
+  host: localhost
+  port: 5433  # Host-mapped port (internal is 5432)
+
+  # Database
+  database: trading
+  user: trading_user
+  # password: Set via POSTGRES_PASSWORD in .env
+
+  # Connection pooling
+  min_pool_size: 2
+  max_pool_size: 10
+
+# ============================================
+# REDIS - In-Memory Cache
+# ============================================
+redis:
+  # Connection
+  # Use 'localhost' when running on host
+  # Use 'redis' when running inside Docker container
+  host: localhost
+  port: 6379
+
+  # Database selection
+  db: 0
+
+  # Optional password: Set via REDIS_PASSWORD in .env
+  # For local dev, no password is fine
+
+  # Performance
+  max_connections: 50
+  socket_timeout_sec: 5

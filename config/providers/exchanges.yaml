@@ -1,0 +1,259 @@
+# Exchange Configuration
+# Single source of truth for all exchange settings and symbol mappings
+#
+# Each symbol entry includes:
+#   - native: Exchange-specific symbol format
+#   - base: Normalized base asset (for multi-exchange comparison)
+#   - quote: Quote currency
+
+exchanges:
+  binance:
+    enabled: true
+    name: "Binance"
+    websocket_url: "wss://stream.binance.com:9443/ws"
+
+    symbols:
+      # Top 5 by market cap
+      - native: BTCUSDT
+        base: BTC
+        quote: USDT
+      - native: ETHUSDT
+        base: ETH
+        quote: USDT
+      - native: BNBUSDT
+        base: BNB
+        quote: USDT
+      - native: SOLUSDT
+        base: SOL
+        quote: USDT
+      - native: XRPUSDT
+        base: XRP
+        quote: USDT
+
+      # DeFi tokens
+      - native: ADAUSDT
+        base: ADA
+        quote: USDT
+      - native: DOGEUSDT
+        base: DOGE
+        quote: USDT
+      - native: DOTUSDT
+        base: DOT
+        quote: USDT
+      - native: MATICUSDT
+        base: MATIC
+        quote: USDT
+      - native: AVAXUSDT
+        base: AVAX
+        quote: USDT
+
+      # Layer 2 & Others
+      - native: LINKUSDT
+        base: LINK
+        quote: USDT
+      - native: UNIUSDT
+        base: UNI
+        quote: USDT
+      - native: ATOMUSDT
+        base: ATOM
+        quote: USDT
+      - native: LTCUSDT
+        base: LTC
+        quote: USDT
+      - native: NEARUSDT
+        base: NEAR
+        quote: USDT
+      - native: APTUSDT
+        base: APT
+        quote: USDT
+      - native: ARBUSDT
+        base: ARB
+        quote: USDT
+      - native: OPUSDT
+        base: OP
+        quote: USDT
+      - native: INJUSDT
+        base: INJ
+        quote: USDT
+      - native: SUIUSDT
+        base: SUI
+        quote: USDT
+
+    features:
+      trades: true
+      orderbook: true
+      orderbook_depth: 10
+      orderbook_update_ms: 100
+
+    rate_limits:
+      connections_per_ip: 300
+      messages_per_second: 10
+      requests_per_minute: 1200
+
+  coinbase:
+    enabled: true
+    name: "Coinbase"
+    websocket_url: "wss://ws-feed.exchange.coinbase.com"
+
+    symbols:
+      - native: BTC-USD
+        base: BTC
+        quote: USD
+      - native: ETH-USD
+        base: ETH
+        quote: USD
+      - native: SOL-USD
+        base: SOL
+        quote: USD
+      - native: XRP-USD
+        base: XRP
+        quote: USD
+      - native: ADA-USD
+        base: ADA
+        quote: USD
+      - native: DOGE-USD
+        base: DOGE
+        quote: USD
+      - native: DOT-USD
+        base: DOT
+        quote: USD
+      - native: MATIC-USD
+        base: MATIC
+        quote: USD
+      - native: AVAX-USD
+        base: AVAX
+        quote: USD
+      - native: LINK-USD
+        base: LINK
+        quote: USD
+      - native: UNI-USD
+        base: UNI
+        quote: USD
+      - native: ATOM-USD
+        base: ATOM
+        quote: USD
+      - native: LTC-USD
+        base: LTC
+        quote: USD
+      - native: NEAR-USD
+        base: NEAR
+        quote: USD
+      - native: APT-USD
+        base: APT
+        quote: USD
+      - native: ARB-USD
+        base: ARB
+        quote: USD
+      - native: OP-USD
+        base: OP
+        quote: USD
+      - native: INJ-USD
+        base: INJ
+        quote: USD
+      - native: SUI-USD
+        base: SUI
+        quote: USD
+      - native: TIA-USD
+        base: TIA
+        quote: USD
+
+    features:
+      trades: true
+      orderbook: true
+      orderbook_depth: 10
+
+    rate_limits:
+      connections_per_ip: 10
+      messages_per_second: 100
+
+  kraken:
+    enabled: true
+    name: "Kraken"
+    websocket_url: "wss://ws.kraken.com/"
+
+    symbols:
+      - native: XBT/USD  # Kraken uses XBT instead of BTC
+        base: BTC
+        quote: USD
+      - native: ETH/USD
+        base: ETH
+        quote: USD
+      - native: SOL/USD
+        base: SOL
+        quote: USD
+      - native: XRP/USD
+        base: XRP
+        quote: USD
+      - native: ADA/USD
+        base: ADA
+        quote: USD
+      - native: XDG/USD  # Kraken uses XDG instead of DOGE
+        base: DOGE
+        quote: USD
+      - native: DOT/USD
+        base: DOT
+        quote: USD
+      - native: MATIC/USD
+        base: MATIC
+        quote: USD
+      - native: AVAX/USD
+        base: AVAX
+        quote: USD
+      - native: LINK/USD
+        base: LINK
+        quote: USD
+      - native: UNI/USD
+        base: UNI
+        quote: USD
+      - native: ATOM/USD
+        base: ATOM
+        quote: USD
+      - native: LTC/USD
+        base: LTC
+        quote: USD
+      - native: NEAR/USD
+        base: NEAR
+        quote: USD
+      - native: APT/USD
+        base: APT
+        quote: USD
+      - native: ARB/USD
+        base: ARB
+        quote: USD
+      - native: OP/USD
+        base: OP
+        quote: USD
+      - native: INJ/USD
+        base: INJ
+        quote: USD
+      - native: ALGO/USD
+        base: ALGO
+        quote: USD
+      - native: FIL/USD
+        base: FIL
+        quote: USD
+
+    features:
+      trades: true
+      orderbook: true
+      orderbook_depth: 10
+
+    rate_limits:
+      connections_per_ip: 50
+      messages_per_second: 50
+
+  # Example: Add new exchange (disabled by default)
+  # bybit:
+  #   enabled: false
+  #   name: "Bybit"
+  #   websocket_url: "wss://stream.bybit.com/v5/public/spot"
+  #   symbols:
+  #     - native: BTCUSDT
+  #       base: BTC
+  #       quote: USDT
+  #     - native: ETHUSDT
+  #       base: ETH
+  #       quote: USDT
+  #   features:
+  #     trades: true
+  #     orderbook: true

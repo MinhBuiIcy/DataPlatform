@@ -1,0 +1,53 @@
+# Object Storage Configuration
+# Public config - safe to commit to git
+# AWS credentials are in .env (gitignored)
+
+# ============================================
+# S3 / LOCALSTACK (Local development)
+# ============================================
+s3:
+  # Bucket names
+  buckets:
+    raw_data: trading-raw-data-local
+    processed_data: trading-processed-data-local
+    models: trading-models-local
+    backups: trading-backups-local
+
+  # AWS Region
+  region: us-east-1
+
+  # LocalStack endpoint: Set via AWS_ENDPOINT_URL in .env
+  # For production AWS, leave AWS_ENDPOINT_URL empty
+
+  # Lifecycle (Phase 2+)
+  lifecycle_rules:
+    raw_data_retention_days: 90
+    processed_data_retention_days: 365
+    backup_retention_days: 30
+
+# ============================================
+# GCS (Google Cloud Storage - Phase 6)
+# ============================================
+gcs:
+  # Bucket names
+  buckets:
+    raw_data: trading-raw-data
+    processed_data: trading-processed-data
+    models: trading-models
+
+  # Project & region
+  project_id: trading-platform
+  region: us-central1
+
+# ============================================
+# AZURE BLOB (Azure - Phase 6)
+# ============================================
+azure_blob:
+  # Container names
+  containers:
+    raw_data: trading-raw-data
+    processed_data: trading-processed-data
+    models: trading-models
+
+  # Account name (account key in .env)
+  storage_account_name: tradingplatform
