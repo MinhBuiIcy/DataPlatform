@@ -6,7 +6,8 @@ Event-driven consumer for Kafka topics
 
 import json
 import logging
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 from aiokafka import AIOKafkaConsumer
 
@@ -46,9 +47,7 @@ class KafkaStreamConsumer(BaseStreamConsumer):
 
             await self.consumer.start()
 
-            logger.info(
-                f"✓ Connected to Kafka consumer: {self.settings.KAFKA_BOOTSTRAP_SERVERS}"
-            )
+            logger.info(f"✓ Connected to Kafka consumer: {self.settings.KAFKA_BOOTSTRAP_SERVERS}")
         except Exception as e:
             logger.error(f"✗ Failed to connect Kafka consumer: {e}")
             raise

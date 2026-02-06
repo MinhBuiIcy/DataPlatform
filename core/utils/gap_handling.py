@@ -42,9 +42,7 @@ def detect_gaps(candles: list[Candle], expected_interval_minutes: int) -> list[G
 
         if actual_delta > expected_delta:
             # Gap detected
-            missing_count = (
-                int(actual_delta.total_seconds() / 60 / expected_interval_minutes) - 1
-            )
+            missing_count = int(actual_delta.total_seconds() / 60 / expected_interval_minutes) - 1
             gaps.append(
                 GapInfo(
                     start_time=current_time + expected_delta,

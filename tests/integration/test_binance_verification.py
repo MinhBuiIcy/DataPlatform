@@ -9,8 +9,7 @@ Requirements:
 - ccxt library installed (uv add ccxt)
 """
 
-import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import ccxt
 import pytest
@@ -40,7 +39,7 @@ def test_sma_matches_binance():
     # Convert to our Candle objects
     candles = [
         Candle(
-            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=UTC),
             exchange="binance",
             symbol="BTCUSDT",
             timeframe="1h",
@@ -89,7 +88,7 @@ def test_ema_matches_binance():
 
     candles = [
         Candle(
-            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=UTC),
             exchange="binance",
             symbol="BTCUSDT",
             timeframe="1h",
@@ -141,7 +140,7 @@ def test_rsi_matches_binance():
 
     candles = [
         Candle(
-            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=UTC),
             exchange="binance",
             symbol="BTCUSDT",
             timeframe="1h",
@@ -183,7 +182,7 @@ def test_macd_matches_binance():
 
     candles = [
         Candle(
-            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
+            timestamp=datetime.fromtimestamp(c[0] / 1000, tz=UTC),
             exchange="binance",
             symbol="BTCUSDT",
             timeframe="1h",
@@ -239,7 +238,7 @@ def test_multiple_symbols_verification():
 
         candles = [
             Candle(
-                timestamp=datetime.fromtimestamp(c[0] / 1000, tz=timezone.utc),
+                timestamp=datetime.fromtimestamp(c[0] / 1000, tz=UTC),
                 exchange="binance",
                 symbol=symbol.replace("/", ""),
                 timeframe="1h",

@@ -3,7 +3,8 @@ Abstract interface for stream consumers (consuming messages)
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Any
 
 
 class BaseStreamConsumer(ABC):

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from core.models.market_data import Candle
 
@@ -51,8 +51,8 @@ class BaseTimeSeriesDB(ABC):
         symbol: str,
         timeframe: str,
         limit: int = 200,
-        start_time: Optional[datetime] = None,
-        end_time: Optional[datetime] = None,
+        start_time: datetime | None = None,
+        end_time: datetime | None = None,
     ) -> list[Candle]:
         """
         Query candles from database (pure query, no gap filling)

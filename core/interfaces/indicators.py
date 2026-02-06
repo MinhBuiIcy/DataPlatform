@@ -5,7 +5,6 @@ Cloud-agnostic indicator base class
 """
 
 from abc import ABC, abstractmethod
-from typing import Optional
 
 from core.models.market_data import Candle
 
@@ -37,7 +36,7 @@ class BaseIndicator(ABC):
         self.params = {"period": period, **kwargs}
 
     @abstractmethod
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """
         Calculate indicator from candle data
 
@@ -101,9 +100,7 @@ class BaseIndicator(ABC):
             raise ValueError(f"{self.name}: Empty candles list")
 
         if len(candles) < self.period:
-            raise ValueError(
-                f"{self.name}: Need {self.period} candles, got {len(candles)}"
-            )
+            raise ValueError(f"{self.name}: Need {self.period} candles, got {len(candles)}")
 
     def __repr__(self) -> str:
         """String representation"""

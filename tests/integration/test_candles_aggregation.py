@@ -9,7 +9,7 @@ Requirements:
 """
 
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -35,7 +35,7 @@ async def test_candles_1m_aggregation():
 
     try:
         # Step 1: Insert 100 trades at same timestamp (within 1 minute)
-        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        now = datetime.now(UTC).replace(second=0, microsecond=0)
         exchange = "binance"
         symbol = "TEST_BTCUSDT"
 
@@ -63,9 +63,7 @@ async def test_candles_1m_aggregation():
         await asyncio.sleep(3)
 
         # Step 3: Query candles_1m
-        candles = await db.query_candles(
-            exchange=exchange, symbol=symbol, timeframe="1m", limit=10
-        )
+        candles = await db.query_candles(exchange=exchange, symbol=symbol, timeframe="1m", limit=10)
 
         # Step 4: Verify candle
         assert len(candles) >= 1, "Should have at least 1 candle"
@@ -103,12 +101,12 @@ async def test_no_open_candle_in_query():
 
         if candles:
             latest_candle = candles[-1]
-            current_minute = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+            current_minute = datetime.now(UTC).replace(second=0, microsecond=0)
 
             # Latest candle should be at least 1 minute old
-            assert (
-                latest_candle.timestamp < current_minute
-            ), f"Query returned open candle: {latest_candle.timestamp} >= {current_minute}"
+            assert latest_candle.timestamp < current_minute, (
+                f"Query returned open candle: {latest_candle.timestamp} >= {current_minute}"
+            )
 
     finally:
         await db.close()
@@ -122,7 +120,7 @@ async def test_quote_volume_calculation():
     await db.connect()
 
     try:
-        now = datetime.now(timezone.utc).replace(second=0, microsecond=0)
+        now = datetime.now(UTC).replace(second=0, microsecond=0)
         exchange = "binance"
         symbol = "TEST_QUOTE_VOL"
 
@@ -153,18 +151,16 @@ async def test_quote_volume_calculation():
         await db.insert_trades(trades)
         await asyncio.sleep(3)
 
-        candles = await db.query_candles(
-            exchange=exchange, symbol=symbol, timeframe="1m", limit=1
-        )
+        candles = await db.query_candles(exchange=exchange, symbol=symbol, timeframe="1m", limit=1)
 
         assert len(candles) == 1
         candle = candles[0]
 
         # Expected: 200 + 150 = 350
         expected_quote_volume = Decimal(350.0)
-        assert abs(candle.quote_volume - expected_quote_volume) < Decimal(
-            0.01
-        ), f"Quote volume mismatch: {candle.quote_volume} vs {expected_quote_volume}"
+        assert abs(candle.quote_volume - expected_quote_volume) < Decimal(0.01), (
+            f"Quote volume mismatch: {candle.quote_volume} vs {expected_quote_volume}"
+        )
 
     finally:
         await db.close()

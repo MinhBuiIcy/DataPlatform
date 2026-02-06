@@ -4,6 +4,7 @@ Unit tests for moving average indicators
 Tests with hand-calculated and textbook examples to verify correctness
 """
 
+from datetime import UTC
 from decimal import Decimal
 
 import pytest
@@ -14,10 +15,10 @@ from domain.indicators.moving_averages import EMA, SMA, WMA
 
 def create_test_candle(close: float, timestamp_offset: int = 0) -> Candle:
     """Helper to create test candle with minimal fields"""
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     return Candle(
-        timestamp=datetime.now(timezone.utc) + timedelta(minutes=timestamp_offset),
+        timestamp=datetime.now(UTC) + timedelta(minutes=timestamp_offset),
         exchange="binance",
         symbol="BTCUSDT",
         timeframe="1m",

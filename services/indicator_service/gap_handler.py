@@ -84,9 +84,7 @@ class GapHandler:
         )
 
         for gap in gaps:
-            logger.debug(
-                f"  Gap: {gap.start_time} to {gap.end_time} ({gap.missing_count} candles)"
-            )
+            logger.debug(f"  Gap: {gap.start_time} to {gap.end_time} ({gap.missing_count} candles)")
 
     def _validate_gap_ratio(
         self,

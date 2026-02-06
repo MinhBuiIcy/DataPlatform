@@ -55,9 +55,7 @@ class IndicatorPersistence:
         await self._write_cache(exchange, symbol, timeframe, timestamp, indicators)
 
         # Step 2: Database (background task - non-blocking)
-        asyncio.create_task(
-            self._write_db(exchange, symbol, timeframe, timestamp, indicators)
-        )
+        asyncio.create_task(self._write_db(exchange, symbol, timeframe, timestamp, indicators))
 
     async def _write_cache(
         self,

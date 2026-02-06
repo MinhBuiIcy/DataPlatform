@@ -4,9 +4,6 @@ Unit tests for momentum indicators (RSI, MACD, Stochastic)
 Tests with known scenarios: overbought, oversold, neutral
 """
 
-import pytest
-
-from core.models.market_data import Candle
 from domain.indicators.momentum import MACD, RSI, Stochastic
 from tests.unit.indicators.test_moving_averages import create_test_candle
 
@@ -103,7 +100,7 @@ class TestMACD:
     def test_macd_bullish_signal(self):
         """Test MACD > Signal indicates bullish momentum"""
         # Accelerating uptrend (exponential growth) for clear bullish signal
-        prices = [100 * (1.02 ** i) for i in range(50)]  # 2% growth per period
+        prices = [100 * (1.02**i) for i in range(50)]  # 2% growth per period
         candles = [create_test_candle(p, i) for i, p in enumerate(prices)]
 
         macd = MACD()
@@ -111,7 +108,9 @@ class TestMACD:
 
         assert result is not None
         # In accelerating uptrend, MACD should be above signal
-        assert result["macd"] > result["signal"], f"MACD ({result['macd']:.2f}) should be > signal ({result['signal']:.2f})"
+        assert result["macd"] > result["signal"], (
+            f"MACD ({result['macd']:.2f}) should be > signal ({result['signal']:.2f})"
+        )
         assert result["histogram"] > 0, "Histogram should be positive"
 
     def test_macd_get_results_polymorphism(self):

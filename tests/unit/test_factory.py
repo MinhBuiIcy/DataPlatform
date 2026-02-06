@@ -54,7 +54,7 @@ class TestStreamClientFactory:
         """Test that opensource provider creates KafkaStreamProducer"""
         mock_settings.return_value.CLOUD_PROVIDER = "opensource"
 
-        from providers.opensource.kafka_stream import KafkaStreamProducer
+        from providers.opensource.kafka_stream_producer import KafkaStreamProducer
 
         client = create_stream_producer()
 

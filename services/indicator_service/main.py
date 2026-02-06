@@ -100,9 +100,7 @@ class IndicatorService:
             symbol = event.get("symbol")
             timeframe = event.get("timeframe")
 
-            logger.info(
-                f"📊 Processing candle event: {exchange}/{symbol}/{timeframe}"
-            )
+            logger.info(f"📊 Processing candle event: {exchange}/{symbol}/{timeframe}")
 
             # Calculate indicators
             await self.calculator.process_candle_event(

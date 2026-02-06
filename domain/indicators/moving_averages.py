@@ -8,7 +8,6 @@ Implementations:
 """
 
 import logging
-from typing import Optional
 
 import numpy as np
 import talib
@@ -31,7 +30,7 @@ class SMA(BaseIndicator):
         >>> value = sma.calculate(candles)
     """
 
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate SMA"""
         self.validate_input(candles)
 
@@ -62,7 +61,7 @@ class EMA(BaseIndicator):
         >>> value = ema.calculate(candles)
     """
 
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate EMA"""
         self.validate_input(candles)
 
@@ -92,7 +91,7 @@ class WMA(BaseIndicator):
         >>> value = wma.calculate(candles)
     """
 
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate WMA"""
         self.validate_input(candles)
 

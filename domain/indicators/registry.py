@@ -4,8 +4,6 @@ Indicator registry for managing and creating indicators
 Factory pattern for indicator creation
 """
 
-from typing import Type
-
 from core.interfaces.indicators import BaseIndicator
 from domain.indicators.momentum import MACD, RSI, Stochastic
 from domain.indicators.moving_averages import EMA, SMA, WMA
@@ -19,7 +17,7 @@ class IndicatorRegistry:
     """
 
     # Registry of available indicators
-    _indicators: dict[str, Type[BaseIndicator]] = {
+    _indicators: dict[str, type[BaseIndicator]] = {
         "sma": SMA,
         "ema": EMA,
         "wma": WMA,
@@ -52,14 +50,12 @@ class IndicatorRegistry:
         indicator_class = cls._indicators.get(name.lower())
         if not indicator_class:
             available = ", ".join(cls._indicators.keys())
-            raise ValueError(
-                f"Unknown indicator: {name}. Available: {available}"
-            )
+            raise ValueError(f"Unknown indicator: {name}. Available: {available}")
 
         return indicator_class(**params)
 
     @classmethod
-    def register(cls, name: str, indicator_class: Type[BaseIndicator]) -> None:
+    def register(cls, name: str, indicator_class: type[BaseIndicator]) -> None:
         """
         Register a new indicator
 

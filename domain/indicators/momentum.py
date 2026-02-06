@@ -7,8 +7,6 @@ Implementations:
 - Stochastic: Stochastic Oscillator
 """
 
-from typing import Optional
-
 import numpy as np
 import talib
 
@@ -46,7 +44,7 @@ class RSI(BaseIndicator):
         """
         super().__init__(period=period)
 
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate RSI"""
         self.validate_input(candles)
 
@@ -79,9 +77,7 @@ class MACD(BaseIndicator):
         ...     print("Bullish")
     """
 
-    def __init__(
-        self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9
-    ):
+    def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9):
         """
         Initialize MACD
 
@@ -91,14 +87,12 @@ class MACD(BaseIndicator):
             signal_period: Signal line EMA period (default: 9)
         """
         # Use slow_period as the main period for validation
-        super().__init__(
-            period=slow_period, fast=fast_period, signal=signal_period
-        )
+        super().__init__(period=slow_period, fast=fast_period, signal=signal_period)
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period
 
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """
         Calculate MACD histogram value
 
@@ -108,7 +102,7 @@ class MACD(BaseIndicator):
         result = self.calculate_full(candles)
         return result["histogram"] if result else None
 
-    def calculate_full(self, candles: list[Candle]) -> Optional[dict]:
+    def calculate_full(self, candles: list[Candle]) -> dict | None:
         """
         Calculate all MACD components
 
@@ -198,7 +192,7 @@ class Stochastic(BaseIndicator):
         self.k_slow_period = k_slow_period
         self.d_period = d_period
 
-    def calculate(self, candles: list[Candle]) -> Optional[float]:
+    def calculate(self, candles: list[Candle]) -> float | None:
         """
         Calculate Stochastic %K value
 
@@ -208,7 +202,7 @@ class Stochastic(BaseIndicator):
         result = self.calculate_full(candles)
         return result["k"] if result else None
 
-    def calculate_full(self, candles: list[Candle]) -> Optional[dict]:
+    def calculate_full(self, candles: list[Candle]) -> dict | None:
         """
         Calculate both %K and %D values
 
