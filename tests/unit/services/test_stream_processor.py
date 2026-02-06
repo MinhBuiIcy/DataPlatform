@@ -24,7 +24,7 @@ def mock_clients():
     """Fixture to mock all client dependencies"""
     with (
         patch(
-            "services.market_data_ingestion.stream_processor.create_stream_client"
+            "services.market_data_ingestion.stream_processor.create_stream_producer"
         ) as mock_stream_factory,
         patch(
             "services.market_data_ingestion.stream_processor.create_storage_client"

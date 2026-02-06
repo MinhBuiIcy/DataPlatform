@@ -7,9 +7,9 @@
 # ============================================
 clickhouse:
   # Connection
-  # Use 'localhost' when running on host
-  # Use 'clickhouse' when running inside Docker container
-  host: localhost
+  # Docker network hostname (services run inside Docker)
+  # Use 'localhost' only when running services on host machine
+  host: clickhouse
   port: 9000  # Native protocol
   http_port: 8123  # HTTP interface
 
@@ -27,10 +27,10 @@ clickhouse:
 # ============================================
 postgres:
   # Connection
-  # Use 'localhost:5433' when running on host (mapped port)
-  # Use 'postgres:5432' when running inside Docker container
-  host: localhost
-  port: 5433  # Host-mapped port (internal is 5432)
+  # Docker network hostname (services run inside Docker)
+  # Use 'localhost:5433' only when running services on host machine
+  host: postgres
+  port: 5432  # Internal Docker port
 
   # Database
   database: trading
@@ -46,9 +46,9 @@ postgres:
 # ============================================
 redis:
   # Connection
-  # Use 'localhost' when running on host
-  # Use 'redis' when running inside Docker container
-  host: localhost
+  # Docker network hostname (services run inside Docker)
+  # Use 'localhost' only when running services on host machine
+  host: redis
   port: 6379
 
   # Database selection

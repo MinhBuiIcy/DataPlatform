@@ -11,39 +11,40 @@ from core.interfaces.cache import BaseCacheClient
 from core.interfaces.database import BaseTimeSeriesDB
 from core.interfaces.market_data import BaseExchangeWebSocket
 from core.interfaces.storage import BaseStorageClient
-from core.interfaces.streaming import BaseStreamClient
+from core.interfaces.streaming_consumer import BaseStreamConsumer
+from core.interfaces.streaming_producer import BaseStreamProducer
 
 logger = logging.getLogger(__name__)
 
 
-def create_stream_client() -> BaseStreamClient:
+def create_stream_producer() -> BaseStreamProducer:
     """
     Create stream client based on CLOUD_PROVIDER config
 
     Returns:
-        BaseStreamClient: Kafka (opensource), Kinesis (aws/localstack), PubSub (gcp), etc.
+        BaseStreamProducer: Kafka (opensource), Kinesis (aws/localstack), PubSub (gcp), etc.
 
     Examples:
         >>> # .env: CLOUD_PROVIDER=opensource
-        >>> client = create_stream_client()  # Returns KafkaStreamClient
+        >>> client = create_stream_producer()  # Returns KafkaStreamProducer
         >>>
         >>> # .env: CLOUD_PROVIDER=aws or localstack
-        >>> client = create_stream_client()  # Returns KinesisStreamClient
+        >>> client = create_stream_producer()  # Returns KinesisStreamProducer
     """
     settings = get_settings()
     provider = settings.CLOUD_PROVIDER.lower()
 
     if provider == "opensource":
-        from providers.opensource.kafka_stream import KafkaStreamClient
+        from providers.opensource.kafka_stream_producer import KafkaStreamProducer
 
-        logger.info("✓ Creating KafkaStreamClient (opensource)")
-        return KafkaStreamClient()
+        logger.info("✓ Creating KafkaStreamProducer (opensource)")
+        return KafkaStreamProducer()
 
     elif provider in ["aws", "localstack"]:
-        from providers.aws.kinesis import KinesisStreamClient
+        from providers.aws.kinesis import KinesisStreamProducer
 
-        logger.info("✓ Creating KinesisStreamClient (aws/localstack)")
-        return KinesisStreamClient()
+        logger.info("✓ Creating KinesisStreamProducer (aws/localstack)")
+        return KinesisStreamProducer()
 
     elif provider == "gcp":
         # TODO: Implement PubSubClient
@@ -52,6 +53,48 @@ def create_stream_client() -> BaseStreamClient:
     elif provider == "azure":
         # TODO: Implement EventHubClient
         raise NotImplementedError("Azure EventHubClient not implemented yet")
+
+    else:
+        raise ValueError(
+            f"Unsupported cloud provider: {provider}. "
+            f"Supported: opensource (Kafka), aws, localstack, gcp, azure"
+        )
+
+
+def create_stream_consumer() -> BaseStreamConsumer:
+    """
+    Create stream consumer based on CLOUD_PROVIDER config
+
+    Returns:
+        BaseStreamConsumer: Kafka (opensource), Kinesis (aws/localstack), etc.
+
+    Examples:
+        >>> # .env: CLOUD_PROVIDER=opensource
+        >>> consumer = create_stream_consumer()  # Returns KafkaStreamConsumer
+        >>>
+        >>> # .env: CLOUD_PROVIDER=aws or localstack
+        >>> consumer = create_stream_consumer()  # Returns KinesisStreamConsumer
+    """
+    settings = get_settings()
+    provider = settings.CLOUD_PROVIDER.lower()
+
+    if provider == "opensource":
+        from providers.opensource.kafka_stream_consumer import KafkaStreamConsumer
+
+        logger.info("✓ Creating KafkaStreamConsumer (opensource)")
+        return KafkaStreamConsumer()
+
+    elif provider in ["aws", "localstack"]:
+        # TODO: Implement KinesisStreamConsumer
+        raise NotImplementedError("Kinesis consumer not implemented yet")
+
+    elif provider == "gcp":
+        # TODO: Implement PubSubConsumer
+        raise NotImplementedError("GCP PubSub consumer not implemented yet")
+
+    elif provider == "azure":
+        # TODO: Implement EventHubConsumer
+        raise NotImplementedError("Azure EventHub consumer not implemented yet")
 
     else:
         raise ValueError(

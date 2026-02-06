@@ -11,10 +11,10 @@ import pytest
 from factory.client_factory import (
     create_cache_client,
     create_storage_client,
-    create_stream_client,
+    create_stream_producer,
     create_timeseries_db,
 )
-from providers.aws.kinesis import KinesisStreamClient
+from providers.aws.kinesis import KinesisStreamProducer
 from providers.aws.s3 import S3StorageClient
 from providers.opensource.clickhouse import ClickHouseClient
 from providers.opensource.redis_client import RedisClient
@@ -25,21 +25,21 @@ class TestStreamClientFactory:
 
     @patch("factory.client_factory.get_settings")
     def test_create_kinesis_client_for_aws(self, mock_settings):
-        """Test that AWS config creates KinesisStreamClient"""
+        """Test that AWS config creates KinesisStreamProducer"""
         mock_settings.return_value.CLOUD_PROVIDER = "aws"
 
-        client = create_stream_client()
+        client = create_stream_producer()
 
-        assert isinstance(client, KinesisStreamClient)
+        assert isinstance(client, KinesisStreamProducer)
 
     @patch("factory.client_factory.get_settings")
     def test_create_kinesis_client_for_localstack(self, mock_settings):
-        """Test that LocalStack config creates KinesisStreamClient"""
+        """Test that LocalStack config creates KinesisStreamProducer"""
         mock_settings.return_value.CLOUD_PROVIDER = "localstack"
 
-        client = create_stream_client()
+        client = create_stream_producer()
 
-        assert isinstance(client, KinesisStreamClient)
+        assert isinstance(client, KinesisStreamProducer)
 
     @patch("factory.client_factory.get_settings")
     def test_unsupported_provider_raises_error(self, mock_settings):
@@ -47,18 +47,18 @@ class TestStreamClientFactory:
         mock_settings.return_value.CLOUD_PROVIDER = "invalid"
 
         with pytest.raises(ValueError, match="Unsupported cloud provider"):
-            create_stream_client()
+            create_stream_producer()
 
     @patch("factory.client_factory.get_settings")
     def test_opensource_provider_creates_kafka(self, mock_settings):
-        """Test that opensource provider creates KafkaStreamClient"""
+        """Test that opensource provider creates KafkaStreamProducer"""
         mock_settings.return_value.CLOUD_PROVIDER = "opensource"
 
-        from providers.opensource.kafka_stream import KafkaStreamClient
+        from providers.opensource.kafka_stream import KafkaStreamProducer
 
-        client = create_stream_client()
+        client = create_stream_producer()
 
-        assert isinstance(client, KafkaStreamClient)
+        assert isinstance(client, KafkaStreamProducer)
 
 
 class TestCacheClientFactory:
@@ -120,13 +120,13 @@ class TestFactoryIntegration:
 
         # Test AWS
         mock_settings.return_value.CLOUD_PROVIDER = "aws"
-        aws_stream = create_stream_client()
-        assert isinstance(aws_stream, KinesisStreamClient)
+        aws_stream = create_stream_producer()
+        assert isinstance(aws_stream, KinesisStreamProducer)
 
         # Test LocalStack (same class as AWS)
         mock_settings.return_value.CLOUD_PROVIDER = "localstack"
-        localstack_stream = create_stream_client()
-        assert isinstance(localstack_stream, KinesisStreamClient)
+        localstack_stream = create_stream_producer()
+        assert isinstance(localstack_stream, KinesisStreamProducer)
 
         # Different instances
         assert aws_stream is not localstack_stream

@@ -15,37 +15,58 @@ This platform demonstrates advanced technical skills in:
 
 **Tech Stack:**
 
-- **AWS Services (LocalStack)**: S3, Kinesis, Lambda, DynamoDB, EventBridge, SQS
-- **Stateful Services**: ClickHouse, Redis, PostgreSQL (Docker or Cloud Managed)
-- **Application Layer**: FastAPI, Python, MLflow, Jupyter
+- **Streaming & Messaging**: Kafka (data streaming), RabbitMQ (task queues), Kinesis (AWS alternative)
+- **Storage**: S3 (LocalStack), ClickHouse (time-series), Redis (cache), PostgreSQL (metadata)
+- **Application Layer**: FastAPI, Python, AsyncIO, MLflow, Jupyter
 - **Monitoring**: Grafana, Prometheus
+- **Cloud Services (LocalStack)**: Lambda, DynamoDB, EventBridge, SQS
 
 ---
 
 ## 📊 Architecture
 
-### Local Development (LocalStack + Docker)
+### Hybrid Messaging Architecture
 
 ```
-Binance/Coinbase WebSocket
+┌─────────────────────────────────────────────────────────────────┐
+│                  DATA STREAMING (Kafka)                         │
+│  Exchange WebSockets → Kafka → [S3, ClickHouse, Redis]        │
+│  • High throughput (60+ symbols)                               │
+│  • Message replay for backtesting                              │
+│  • Multiple consumers (analytics, ML)                          │
+│  • 24h retention                                               │
+└─────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────┐
+│                  TASK QUEUES (RabbitMQ)                         │
+│  Trading API → RabbitMQ → Workers                              │
+│  • Order execution (priority queues)                           │
+│  • Backtest jobs (parallel workers)                            │
+│  • Notifications (email, telegram)                             │
+│  • Dead letter queues for failures                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Local Development Stack
+
+```
+Binance/Coinbase/Kraken WebSocket
     ↓
-AWS Kinesis (LocalStack) / Kafka (Docker)
+Kafka (Docker) - Data streaming pipeline
     ↓
 Lambda Functions (LocalStack) / Python Services
     ↓
-├── S3 (LocalStack) - Raw data storage
-├── ClickHouse (Docker/Cloud) - Time-series OLAP
-├── Redis (Docker/Cloud) - Caching & state
-├── PostgreSQL (Docker/Cloud) - Metadata
-└── DynamoDB (LocalStack) - Alternative NoSQL
+├── S3 (LocalStack) - Raw data backup
+├── ClickHouse (Docker) - Time-series OLAP
+├── Redis (Docker) - Hot cache
+├── PostgreSQL (Docker) - Metadata
     ↓
-├── Strategy Engine (Lambda or Python service)
-├── ML Pipeline (SageMaker Local / Jupyter)
-└── FastAPI (API Gateway LocalStack + Lambda)
+Trading API (FastAPI) → RabbitMQ → Workers
     ↓
-├── EventBridge (LocalStack) - Event orchestration
-├── Grafana (Docker) - Real-time monitoring
-└── CloudWatch (LocalStack) - Logs & metrics
+├── Strategy Engine
+├── ML Pipeline (Jupyter)
+├── Grafana (Docker) - Monitoring
+└── Prometheus - Metrics collection
 ```
 
 ### Cloud Production (Same code, different endpoints)
@@ -355,41 +376,47 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 
 ## 🗺️ Development Phases
 
-### 📍 **PHASE 1: Foundation & Real-time Data** (Day 1-2)
+### 📍 **PHASE 1: Foundation & Real-time Data** ✅ **COMPLETED**
 
 **Goal:** Stream live crypto market data into the system
 
 #### Minimal Features (Required):
 
 - [X] LocalStack setup (S3, Kinesis, Lambda)
-- [X] Docker Compose for stateful services (ClickHouse, Redis, Grafana)
+- [X] Docker Compose for stateful services (ClickHouse, Redis, Grafana, Kafka)
 - [X] WebSocket connection to Binance (BTC, ETH)
-- [X] Stream to Kinesis (LocalStack) → S3 (raw data backup)
+- [X] Stream to Kafka/Kinesis → S3 (raw data backup)
 - [X] ClickHouse table: `trades` (symbol, price, quantity, timestamp)
 - [X] Grafana dashboard: Real-time price line chart
-- [X] Environment config: `.env.local` pointing to LocalStack endpoints
+- [X] Environment config: `.env` + YAML configs (cloud-agnostic)
 
-#### Advanced Features (Optional):
+#### Advanced Features (Completed):
 
-- [ ] Multi-exchange support (Binance, Coinbase, Kraken)
-- [ ] 20+ crypto symbols streaming
-- [ ] Order book depth data
-- [ ] Data quality validation (spike detection)
-- [ ] Kafka Connect for alternative ingestion
+- [X] Multi-exchange support (Binance, Coinbase, Kraken)
+- [X] 60+ crypto symbols streaming (20+ per exchange)
+- [X] Order book depth data with quality validation
+- [X] Data quality validation (spike detection, crossed book checks)
+- [X] Kafka migration (KRaft mode, dual listeners)
+- [X] Cloud-agnostic architecture (factory pattern, generic naming)
+- [X] Comprehensive testing (62/62 tests passing: 46 unit, 16 integration)
+- [X] Git pre-push hooks (secrets detection, lint, format, tests)
+- [X] YAML-based configuration (public) + .env secrets (gitignored)
 
 **Services:**
 
-- LocalStack: Kinesis, S3, Lambda (optional)
-- Docker: ClickHouse, Redis, Grafana
-- Python: Market data ingestion service
+- Docker: Kafka, ClickHouse, Redis, PostgreSQL, Grafana, Prometheus
+- LocalStack: S3, Kinesis (optional alternative to Kafka)
+- Python: Market data ingestion service with async WebSocket clients
 
 **Tech Showcase:**
 
-- WebSocket handling with reconnection logic
-- AWS Kinesis streams (via LocalStack, production-ready code)
-- S3 data lake pattern (raw data persistence)
-- ClickHouse partitioning strategy
-- boto3 SDK with LocalStack endpoints
+- **Cloud-Agnostic Design**: Factory pattern, swappable providers (Kafka/Kinesis, S3/GCS, ClickHouse/TimescaleDB)
+- **Multi-Exchange Integration**: Binance, Coinbase, Kraken with unified interface
+- **Kafka Streaming**: KRaft mode, dual listeners (Docker + host), 24h retention
+- **Data Quality**: Spike detection, order book validation, data validators
+- **Testing**: 62/62 tests (unit + integration), pytest markers, timezone-aware
+- **DevOps**: Git hooks, ruff linting/formatting, uv dependency management
+- **Monitoring**: Grafana dashboards with multi-exchange metrics
 
 ---
 
@@ -417,14 +444,32 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 **Services:**
 
 - Redis (already running)
-- Lambda (LocalStack) for real-time processing (optional alternative to materialized views)
+- Kafka (already from Phase 1) - Event triggers
+- **NEW**: Python Indicator Service - Event-driven Kafka consumer
+- **NEW**: ClickHouse Kafka Engine - Database → message queue triggers
+
+**Architecture Notes:**
+
+**Indicator Calculation Approach (Phase 2)**:
+- **Event-driven**: ClickHouse → Kafka → Python service (implemented from Day 1)
+- ClickHouse Materialized View triggers Kafka event when new candle created
+- Python Kafka consumer calculates indicators instantly (<1s latency)
+- Writes results to ClickHouse + caches in Redis
+- **Latency**: <1 second (sub-second real-time)
+- **Why event-driven in Phase 2?**:
+  - Kafka infrastructure already exists (Phase 1)
+  - ClickHouse Kafka Engine = 1 SQL statement
+  - Production-ready from start, no refactoring needed Phase 3+
+  - Industry standard for time-series data platforms
 
 **Tech Showcase:**
 
-- ClickHouse materialized views performance
-- Incremental aggregation algorithms
-- Sub-second query latency on billions of rows
-- Lambda event-driven processing (Kinesis trigger)
+- ClickHouse materialized views + Kafka Engine integration
+- Event-driven microservices (Kafka consumer patterns)
+- Sub-second end-to-end latency (trade → indicator calculated)
+- **Closed candle validation**: Prevent calculating on incomplete data
+- TA-Lib integration for industry-standard indicators
+- Redis-first architecture (low-latency caching)
 
 ---
 
@@ -453,20 +498,42 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 - [ ] Order types: Market, Limit, Stop-Loss, Trailing Stop
 - [ ] Position sizing algorithms (Kelly Criterion)
 - [ ] Strategy parameters optimization (grid search)
+- [ ] RabbitMQ task queues for order execution:
+  - Priority queues (urgent stop-loss orders first)
+  - Dead letter queues (failed order handling)
+  - Message acknowledgment (ensure order processed)
+  - Task distribution across workers
 
 **Services:**
 
 - PostgreSQL (Docker)
+- RabbitMQ (Docker) - NEW: Task queue for order execution and async jobs
 - API Gateway + Lambda (LocalStack) OR FastAPI (Python service)
 - EventBridge (LocalStack) for event routing
-- SQS (LocalStack) for async processing
+- SQS/RabbitMQ for async processing
+
+**Architecture Notes:**
+
+**Hybrid Messaging Architecture**:
+- **Kafka** (already from Phase 1-2): High-throughput data streaming (market data, candles, indicators)
+- **RabbitMQ** (NEW in Phase 3): Task queues for order execution, backtests, notifications
+  - Priority queues: Urgent orders (stop-loss) processed first
+  - Dead letter queues: Failed order handling and retry logic
+  - Message acknowledgment: Ensure order execution reliability
+
+**Why both Kafka and RabbitMQ?**
+- Kafka: Data streaming, event sourcing, high throughput
+- RabbitMQ: Task distribution, work queues, point-to-point messaging
+- Industry standard to use both for different use cases
 
 **Tech Showcase:**
 
-- Event-driven architecture (EventBridge, SQS)
+- **Hybrid Architecture**: Kafka (data streaming) + RabbitMQ (task queues)
+- Event-driven architecture (EventBridge, RabbitMQ routing)
 - Serverless API (API Gateway + Lambda) or containerized (FastAPI)
 - Stateful strategy execution
 - WebSocket fan-out for real-time updates
+- Task queue patterns: Priority queues, dead letter queues, retries
 - Infrastructure as Code (AWS CDK or Terraform for LocalStack)
 
 ---
@@ -500,15 +567,22 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 - [ ] Strategy comparison dashboard
 - [ ] Optimization: Parameter grid search with parallel execution
 - [ ] Backtest on tick-level data (vs candles)
+- [ ] Distributed backtesting with RabbitMQ:
+  - Submit backtest jobs to queue
+  - Parallel workers process different parameter sets
+  - Result aggregation and comparison
+  - Long-running job management
 
-**Services:** +Jupyter (for analysis)
+**Services:** +Jupyter (for analysis), +RabbitMQ (for distributed job queue)
 
 **Tech Showcase:**
 
 - Vectorized backtesting (pandas/numpy)
 - ClickHouse query optimization for historical data
 - Statistical analysis of strategy performance
-- Parallel backtesting (multiple strategies/parameters)
+- **Distributed parallel backtesting**: RabbitMQ job queue with multiple workers
+- Parameter optimization with grid search (distributed across workers)
+- Task queue patterns: Job acknowledgment, progress tracking, result collection
 
 ---
 
@@ -621,6 +695,44 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 ---
 
 ## 🛠️ Tech Stack Details
+
+### Messaging Architecture: Kafka vs RabbitMQ
+
+**When to use Kafka (Data Streaming)**:
+- ✅ Market data ingestion (trades, order books)
+- ✅ Event streaming with replay capability
+- ✅ Multiple consumers need same data
+- ✅ High throughput (60+ symbols, thousands msg/sec)
+- ✅ Message retention (24h+) for backtesting
+- ✅ Analytics pipelines
+
+**When to use RabbitMQ (Task Queues)**:
+- ✅ Order execution (need acknowledgment)
+- ✅ Priority queues (urgent stop-loss first)
+- ✅ Dead letter queues (failed task handling)
+- ✅ Work distribution (backtest jobs to workers)
+- ✅ Notifications (email, telegram)
+- ✅ Long-running async jobs
+
+**Implementation**:
+```python
+# factory/client_factory.py
+def create_stream_client() -> BaseStreamClient:
+    """Kafka/Kinesis for data streaming"""
+    if settings.CLOUD_PROVIDER == "opensource":
+        return KafkaStreamClient()
+    elif settings.CLOUD_PROVIDER == "aws":
+        return KinesisStreamClient()
+
+def create_task_queue() -> BaseTaskQueue:
+    """RabbitMQ/SQS for task queues (Phase 3+)"""
+    if settings.CLOUD_PROVIDER == "opensource":
+        return RabbitMQClient()
+    elif settings.CLOUD_PROVIDER == "aws":
+        return SQSClient()
+```
+
+---
 
 ### LocalStack (AWS Services Emulation)
 

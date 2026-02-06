@@ -177,6 +177,135 @@ class ClickHouseClient(BaseTimeSeriesDB):
             logger.error(f"✗ ClickHouse orderbook insert error: {e}")
             raise
 
+    async def query_candles(
+        self,
+        exchange: str,
+        symbol: str,
+        timeframe: str,
+        limit: int = 200,
+        start_time: Any | None = None,
+        end_time: Any | None = None,
+    ) -> list:
+        """
+        Query candles from ClickHouse
+
+        Args:
+            exchange: Exchange name
+            symbol: Trading pair
+            timeframe: Timeframe (1m, 5m, 1h, etc.)
+            limit: Max candles to return
+            start_time: Start time filter (optional)
+            end_time: End time filter (optional)
+
+        Returns:
+            List of Candle objects (may have gaps)
+        """
+        from core.models.market_data import Candle
+
+        if not self.client:
+            raise RuntimeError("ClickHouse client not connected")
+
+        try:
+            # Map timeframe to table name
+            table_mapping = {"1m": "candles_1m", "5m": "candles_5m", "1h": "candles_1h"}
+            table = table_mapping.get(timeframe, "candles_1m")
+
+            # Build query
+            query = f"""
+                SELECT
+                    timestamp, exchange, symbol, '{timeframe}' as timeframe,
+                    open, high, low, close,
+                    volume, quote_volume, trades_count, is_synthetic
+                FROM trading.{table}
+                WHERE exchange = %(exchange)s
+                  AND symbol = %(symbol)s
+                  AND timestamp < now()  -- Only closed candles
+                ORDER BY timestamp DESC
+                LIMIT %(limit)s
+            """
+
+            params = {"exchange": exchange, "symbol": symbol, "limit": limit}
+
+            result = self.client.execute(query, params)
+
+            # Convert to Candle objects (reverse to get ASC order)
+            candles = []
+            for row in reversed(result):
+                candles.append(
+                    Candle(
+                        timestamp=row[0],
+                        exchange=row[1],
+                        symbol=row[2],
+                        timeframe=row[3],
+                        open=row[4],
+                        high=row[5],
+                        low=row[6],
+                        close=row[7],
+                        volume=row[8],
+                        quote_volume=row[9],
+                        trades_count=row[10],
+                        is_synthetic=bool(row[11]),
+                    )
+                )
+
+            logger.debug(f"Queried {len(candles)} candles for {exchange}/{symbol}/{timeframe}")
+            return candles
+
+        except Exception as e:
+            logger.error(f"✗ ClickHouse query_candles error: {e}")
+            raise
+
+    async def insert_indicators(
+        self,
+        exchange: str,
+        symbol: str,
+        timeframe: str,
+        timestamp: Any,
+        indicators: dict[str, float],
+    ) -> int:
+        """
+        Insert indicator values into indicators table
+
+        Uses ReplacingMergeTree for automatic deduplication
+        ORDER BY (exchange, symbol, timeframe, indicator_name, timestamp)
+
+        Args:
+            exchange: Exchange name
+            symbol: Trading pair
+            timeframe: Timeframe
+            timestamp: Candle timestamp
+            indicators: Dict of indicator values
+
+        Returns:
+            Number of rows inserted
+        """
+        if not indicators:
+            return 0
+
+        if not self.client:
+            raise RuntimeError("ClickHouse client not connected")
+
+        try:
+            # Convert to rows format
+            rows = [
+                (timestamp, exchange, symbol, timeframe, indicator_name, float(value))
+                for indicator_name, value in indicators.items()
+            ]
+
+            query = """
+                INSERT INTO trading.indicators
+                (timestamp, exchange, symbol, timeframe, indicator_name, indicator_value)
+                VALUES
+            """
+
+            self.client.execute(query, rows)
+            logger.debug(f"Inserted {len(rows)} indicators for {exchange}/{symbol}/{timeframe}")
+            return len(rows)
+
+        except Exception as e:
+            logger.error(f"✗ ClickHouse insert_indicators error: {e}")
+            raise
+
     async def close(self) -> None:
         """Close connection"""
         if self.client:

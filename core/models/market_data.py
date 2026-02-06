@@ -5,8 +5,10 @@ Pydantic models for market data structures:
 - Trade: Individual trade execution
 - Candle: OHLCV candlestick
 - OrderBook: Order book snapshot
+- GapInfo: Gap detection metadata
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
@@ -61,8 +63,16 @@ class Candle(BaseModel):
     high: Decimal = Field(description="Highest price in interval")
     low: Decimal = Field(description="Lowest price in interval")
     close: Decimal = Field(description="Closing price")
-    volume: Decimal = Field(description="Total volume traded")
+    volume: Decimal = Field(description="Total volume traded (base asset)")
+    quote_volume: Decimal = Field(
+        default=Decimal(0),
+        description="Quote asset volume = SUM(price * quantity) for all trades",
+    )
     trades_count: int = Field(default=0, description="Number of trades in interval")
+    is_synthetic: bool = Field(
+        default=False,
+        description="True if candle was gap-filled (OHLC=prev close, volume=0)",
+    )
 
 
 class OrderBook(BaseModel):
@@ -113,3 +123,17 @@ class OrderBook(BaseModel):
             "asks": [(str(p), str(q)) for p, q in self.asks],
             "checksum": self.checksum,
         }
+
+
+@dataclass
+class GapInfo:
+    """
+    Information about a detected gap in time-series data
+
+    Used for gap detection and filling in candle data
+    """
+
+    start_time: datetime
+    end_time: datetime
+    missing_count: int
+    expected_interval_minutes: int

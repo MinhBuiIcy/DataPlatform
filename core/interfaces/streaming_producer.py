@@ -2,15 +2,15 @@ from abc import ABC, abstractmethod
 from typing import Any
 
 
-class BaseStreamClient(ABC):
+class BaseStreamProducer(ABC):
     """
-    Abstract interface for stream processing
+    Abstract interface for stream producers (publishing messages)
 
     Implementations:
-    - KinesisStreamClient (AWS)
-    - KafkaStreamClient (Open-source)
-    - PubSubClient (GCP)
-    - EventHubClient (Azure)
+    - KafkaStreamProducer (Open-source)
+    - KinesisStreamProducer (AWS)
+    - PubSubProducer (GCP)
+    - EventHubProducer (Azure)
     """
 
     @abstractmethod

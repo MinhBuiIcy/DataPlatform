@@ -18,7 +18,7 @@ from core.validators.market_data import DataValidator
 from factory.client_factory import (
     create_cache_client,
     create_storage_client,
-    create_stream_client,
+    create_stream_producer,
     create_timeseries_db,
 )
 
@@ -46,7 +46,7 @@ class StreamProcessor:
         self.settings = get_settings()
 
         # Create clients via factory (dependency injection)
-        self.stream_client = create_stream_client()
+        self.stream_client = create_stream_producer()
         self.storage_client = create_storage_client()
         self.timeseries_db = create_timeseries_db()
         self.cache_client = create_cache_client()

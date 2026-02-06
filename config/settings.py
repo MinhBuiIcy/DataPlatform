@@ -49,6 +49,7 @@ class Settings(BaseSettings):
             Settings._streaming_config = load_yaml_safe("config/providers/streaming.yaml")
             Settings._database_config = load_yaml_safe("config/providers/databases.yaml")
             Settings._storage_config = load_yaml_safe("config/providers/storage.yaml")
+            Settings._indicators_config = load_yaml_safe("config/providers/indicators.yaml")
             Settings._yaml_loaded = True
 
     # ============================================
@@ -100,6 +101,15 @@ class Settings(BaseSettings):
             self._streaming_config.get("kafka", {})
             .get("topics", {})
             .get("order_books", "order-books")
+        )
+
+    @property
+    def KAFKA_TOPIC_CANDLE_EVENTS(self) -> str:
+        """Kafka topic for candle events from streaming.yaml (Phase 2)"""
+        return (
+            self._streaming_config.get("kafka", {})
+            .get("topics", {})
+            .get("candle_events", "candle-events")
         )
 
     @property
@@ -269,6 +279,29 @@ class Settings(BaseSettings):
             .get("buckets", {})
             .get("models", "trading-models-local")
         )
+
+    # ============================================
+    # INDICATORS (from YAML)
+    # ============================================
+    @property
+    def INDICATORS(self) -> list:
+        """List of enabled indicators from indicators.yaml"""
+        return self._indicators_config.get("indicators", [])
+
+    @property
+    def INDICATOR_CANDLE_LOOKBACK(self) -> int:
+        """Number of candles to query for indicators"""
+        return self._indicators_config.get("settings", {}).get("candle_lookback", 200)
+
+    @property
+    def INDICATOR_MAX_GAP_RATIO(self) -> float:
+        """Max allowed ratio of synthetic candles"""
+        return self._indicators_config.get("settings", {}).get("max_gap_ratio", 0.1)
+
+    @property
+    def INDICATOR_ENABLE_GAP_FILLING(self) -> bool:
+        """Whether to enable gap filling"""
+        return self._indicators_config.get("settings", {}).get("enable_gap_filling", True)
 
 
 # Singleton pattern

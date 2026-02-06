@@ -131,7 +131,7 @@ async def main():
     exchanges = create_exchange_websockets()
 
     # Single processor handles all exchanges (4 destinations)
-    processor = StreamProcessor(buffer_size=100)
+    processor = StreamProcessor(buffer_size=20)  # Smaller buffer for faster dashboard updates
 
     # Connect to all downstream systems
     logger.info("🔗 Connecting to downstream systems...")

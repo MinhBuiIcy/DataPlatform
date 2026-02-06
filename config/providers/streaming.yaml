@@ -10,14 +10,18 @@
 # ============================================
 kafka:
   # Connection
-  # Use 'localhost:9094' when running on host (EXTERNAL listener)
-  # Use 'kafka:9092' when running inside Docker container (INTERNAL listener)
-  bootstrap_servers: localhost:9094
+  # Docker network hostname (services run inside Docker)
+  # Use 'localhost:9094' only when running services on host machine
+  bootstrap_servers: kafka:9092
 
-  # Topics
+  # Topics (by phase)
   topics:
+    # Phase 1: Real-time market data
     market_trades: market-trades
     order_books: order-books
+
+    # Phase 2: Processed candles
+    candle_events: candle-events
 
   # Retention & Performance
   retention_hours: 24
@@ -33,10 +37,14 @@ kafka:
 # KINESIS (AWS - for cloud deployment)
 # ============================================
 kinesis:
-  # Stream names
+  # Stream names (by phase)
   streams:
+    # Phase 1: Real-time market data
     market_trades: market-trades-local
     order_books: order-books-local
+
+    # Phase 2: Processed candles
+    candle_events: candle-events-local
 
   # Retention
   retention_hours: 24

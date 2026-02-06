@@ -11,12 +11,12 @@ from typing import Any
 import aioboto3
 
 from config.settings import get_settings
-from core.interfaces.streaming import BaseStreamClient
+from core.interfaces.streaming_producer import BaseStreamProducer
 
 logger = logging.getLogger(__name__)
 
 
-class KinesisStreamClient(BaseStreamClient):
+class KinesisStreamProducer(BaseStreamProducer):
     """
     AWS Kinesis implementation
 

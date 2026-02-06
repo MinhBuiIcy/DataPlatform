@@ -266,6 +266,102 @@ services:
     restart: unless-stopped
 
   # ============================================
+  # KAFKA INIT - Topic Creation
+  # ============================================
+  kafka-init:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: trading-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - trading-net
+    volumes:
+      - ./kafka/create-topics.sh:/tmp/create-topics.sh:ro
+    command: >
+      bash -c "/tmp/create-topics.sh"
+    restart: "no"
+
+  # ============================================
+  # MARKET DATA INGESTION SERVICE (Phase 1)
+  # ============================================
+  market-data-ingestion:
+    build:
+      context: ../..
+      dockerfile: services/market_data_ingestion/Dockerfile
+    container_name: trading-market-data-ingestion
+    hostname: market-data-ingestion
+    env_file:
+      - ../../.env  # Load secrets from .env
+    environment:
+      # Override only container-specific values
+      # All other configs loaded from config/providers/*.yaml
+      - CLOUD_PROVIDER=${CLOUD_PROVIDER:-opensource}
+    volumes:
+      # Mount code for hot reload (development only)
+      - ../../core:/app/core:ro
+      - ../../domain:/app/domain:ro
+      - ../../factory:/app/factory:ro
+      - ../../providers:/app/providers:ro
+      - ../../services/market_data_ingestion:/app/services/market_data_ingestion:ro
+      - ../../config:/app/config:ro  # Config last to ensure proper override
+    networks:
+      - trading-net
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    profiles:
+      - services  # Start with: docker-compose --profile services up
+
+  # ============================================
+  # INDICATOR SERVICE (Phase 2)
+  # ============================================
+  indicator-service:
+    build:
+      context: ../..
+      dockerfile: services/indicator_service/Dockerfile
+      args:
+        TALIB_BASE_IMAGE: trading-platform/talib-base:3.11
+    container_name: trading-indicator-service
+    hostname: indicator-service
+    env_file:
+      - ../../.env  # Load secrets from .env
+    environment:
+      # Override only container-specific values
+      # All other configs loaded from config/providers/*.yaml
+      - CLOUD_PROVIDER=${CLOUD_PROVIDER:-opensource}
+    volumes:
+      # Mount config directory (read-only)
+      - ../../config:/app/config:ro
+      # Mount code for hot reload (development only)
+      - ../../core:/app/core:ro
+      - ../../domain:/app/domain:ro
+      - ../../factory:/app/factory:ro
+      - ../../providers:/app/providers:ro
+      - ../../services/indicator_service:/app/services/indicator_service:ro
+    networks:
+      - trading-net
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    profiles:
+      - services  # Start with: docker-compose --profile services up
+
+  # ============================================
   # REDIS COMMANDER (Optional - Redis GUI)
   # ============================================
   redis-commander:

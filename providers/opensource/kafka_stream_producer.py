@@ -11,12 +11,12 @@ from typing import Any
 from aiokafka import AIOKafkaProducer
 
 from config.settings import get_settings
-from core.interfaces.streaming import BaseStreamClient
+from core.interfaces.streaming_producer import BaseStreamProducer
 
 logger = logging.getLogger(__name__)
 
 
-class KafkaStreamClient(BaseStreamClient):
+class KafkaStreamProducer(BaseStreamProducer):
     """
     Kafka stream implementation
 

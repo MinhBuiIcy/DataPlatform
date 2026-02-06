@@ -1,0 +1,56 @@
+# Indicator Configuration
+# Defines which technical indicators to calculate and their parameters
+
+# ============================================
+# ENABLED INDICATORS (Phase 2)
+# ============================================
+
+indicators:
+  # Moving Averages
+  - name: SMA_20
+    type: SMA
+    params:
+      period: 20
+
+  - name: SMA_50
+    type: SMA
+    params:
+      period: 50
+
+  - name: EMA_12
+    type: EMA
+    params:
+      period: 12
+
+  - name: EMA_26
+    type: EMA
+    params:
+      period: 26
+
+  # Momentum Indicators
+  - name: RSI_14
+    type: RSI
+    params:
+      period: 14
+
+  - name: MACD
+    type: MACD
+    params:
+      fast_period: 12
+      slow_period: 26
+      signal_period: 9
+
+# ============================================
+# CALCULATION SETTINGS
+# ============================================
+
+settings:
+  # Candle query settings
+  candle_lookback: 200  # Number of candles to query (for EMA warm-up: period * 4)
+
+  # Gap handling
+  max_gap_ratio: 0.1  # Alert if >10% of candles are synthetic
+  enable_gap_filling: true  # Set false to skip calculation on gaps
+
+  # Performance
+  calculation_timeout_ms: 5000  # Max time for all indicator calculations
