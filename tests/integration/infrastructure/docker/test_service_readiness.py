@@ -5,8 +5,8 @@ Verifies all Docker services (ClickHouse, Redis, PostgreSQL) are reachable.
 This is a basic connectivity test - run before TIER 1 tests to verify environment.
 """
 
-import pytest
 import psycopg2
+import pytest
 import redis as redis_lib
 from clickhouse_driver import Client
 
@@ -25,7 +25,7 @@ def test_all_docker_services_reachable():
         host=settings.CLICKHOUSE_HOST,
         port=settings.CLICKHOUSE_PORT,
         user=settings.CLICKHOUSE_USER,
-        password=settings.CLICKHOUSE_PASSWORD
+        password=settings.CLICKHOUSE_PASSWORD,
     )
     result = client.execute("SELECT 1")
     assert result == [(1,)]
@@ -46,7 +46,7 @@ def test_all_docker_services_reachable():
         port=settings.POSTGRES_PORT,
         database=settings.POSTGRES_DB,
         user=settings.POSTGRES_USER,
-        password=settings.POSTGRES_PASSWORD
+        password=settings.POSTGRES_PASSWORD,
     )
     assert conn is not None
     conn.close()

@@ -5,7 +5,7 @@ Uses ccxt library for unified exchange interface.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import ccxt.async_support as ccxt
@@ -48,17 +48,13 @@ class CoinbaseRestAPI(BaseExchangeRestAPI):
         since = int(start.timestamp() * 1000)
 
         try:
-            ohlcv = await self.client.fetch_ohlcv(
-                symbol, timeframe, since=since, limit=limit
-            )
+            ohlcv = await self.client.fetch_ohlcv(symbol, timeframe, since=since, limit=limit)
 
             candles = []
             for row in ohlcv:
                 timestamp_ms, open_, high, low, close, volume = row
 
-                candle_time = datetime.fromtimestamp(
-                    timestamp_ms / 1000, tz=timezone.utc
-                )
+                candle_time = datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC)
                 if candle_time > end:
                     break
 
@@ -99,9 +95,7 @@ class CoinbaseRestAPI(BaseExchangeRestAPI):
             candles = []
             for row in ohlcv:
                 timestamp_ms, open_, high, low, close, volume = row
-                candle_time = datetime.fromtimestamp(
-                    timestamp_ms / 1000, tz=timezone.utc
-                )
+                candle_time = datetime.fromtimestamp(timestamp_ms / 1000, tz=UTC)
 
                 candles.append(
                     Candle(
@@ -120,9 +114,7 @@ class CoinbaseRestAPI(BaseExchangeRestAPI):
                     )
                 )
 
-            logger.debug(
-                f"Fetched {len(candles)} latest klines for {symbol} {timeframe}"
-            )
+            logger.debug(f"Fetched {len(candles)} latest klines for {symbol} {timeframe}")
             return candles
 
         except Exception as e:

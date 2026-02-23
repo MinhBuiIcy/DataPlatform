@@ -4,7 +4,7 @@ Unit tests for IndicatorCalculator
 Tests indicator calculation logic with mocked database and persistence layer.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -24,7 +24,7 @@ def create_test_candle(
     """Helper to create test candles"""
     from datetime import timedelta
 
-    base_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+    base_time = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
     timestamp = base_time + timedelta(minutes=timestamp_offset_minutes)
 
     return Candle(
@@ -153,9 +153,7 @@ class TestIndicatorCalculator:
         calculator = IndicatorCalculator(db=mock_db, persistence=mock_persistence)
 
         # Make one indicator fail
-        calculator.indicators["SMA"].get_results.side_effect = Exception(
-            "SMA calculation failed"
-        )
+        calculator.indicators["SMA"].get_results.side_effect = Exception("SMA calculation failed")
 
         candles = [create_test_candle(50000 + i, i) for i in range(50)]
         latest_candle = candles[-1]
@@ -235,15 +233,11 @@ class TestIndicatorCalculator:
         calculator = IndicatorCalculator(db=mock_db, persistence=mock_persistence)
 
         # Process BTC
-        btc_candles = [
-            create_test_candle(50000 + i, i, symbol="BTCUSDT") for i in range(50)
-        ]
+        btc_candles = [create_test_candle(50000 + i, i, symbol="BTCUSDT") for i in range(50)]
         await calculator.process_candle_with_history(btc_candles[-1], btc_candles)
 
         # Process ETH
-        eth_candles = [
-            create_test_candle(3000 + i, i, symbol="ETHUSDT") for i in range(50)
-        ]
+        eth_candles = [create_test_candle(3000 + i, i, symbol="ETHUSDT") for i in range(50)]
         await calculator.process_candle_with_history(eth_candles[-1], eth_candles)
 
         # Verify both were processed
@@ -264,18 +258,14 @@ class TestIndicatorCalculator:
         calculator = IndicatorCalculator(db=mock_db, persistence=mock_persistence)
 
         # Process Binance
-        binance_candles = [
-            create_test_candle(50000 + i, i, exchange="binance") for i in range(50)
-        ]
+        binance_candles = [create_test_candle(50000 + i, i, exchange="binance") for i in range(50)]
         await calculator.process_candle_with_history(binance_candles[-1], binance_candles)
 
         # Process Coinbase
         coinbase_candles = [
             create_test_candle(50000 + i, i, exchange="coinbase") for i in range(50)
         ]
-        await calculator.process_candle_with_history(
-            coinbase_candles[-1], coinbase_candles
-        )
+        await calculator.process_candle_with_history(coinbase_candles[-1], coinbase_candles)
 
         # Verify both exchanges processed
         assert mock_persistence.save_indicators.call_count == 2
@@ -294,15 +284,11 @@ class TestIndicatorCalculator:
         calculator = IndicatorCalculator(db=mock_db, persistence=mock_persistence)
 
         # Process 1m candles
-        candles_1m = [
-            create_test_candle(50000 + i, i, timeframe="1m") for i in range(50)
-        ]
+        candles_1m = [create_test_candle(50000 + i, i, timeframe="1m") for i in range(50)]
         await calculator.process_candle_with_history(candles_1m[-1], candles_1m)
 
         # Process 5m candles
-        candles_5m = [
-            create_test_candle(50000 + i, i * 5, timeframe="5m") for i in range(50)
-        ]
+        candles_5m = [create_test_candle(50000 + i, i * 5, timeframe="5m") for i in range(50)]
         await calculator.process_candle_with_history(candles_5m[-1], candles_5m)
 
         # Verify both timeframes processed

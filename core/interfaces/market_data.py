@@ -75,6 +75,7 @@ class BaseExchangeWebSocket(ABC):
         if self._ws_config_cache is not None:
             return self._ws_config_cache
         from config.settings import get_settings
+
         settings = get_settings()
         self._ws_config_cache = {
             "queue_max_size": settings.WS_QUEUE_MAX_SIZE,
@@ -199,9 +200,7 @@ class BaseExchangeWebSocket(ABC):
         try:
             queue.put_nowait(("trade", trade))
         except asyncio.QueueFull:
-            logger.warning(
-                f"Queue full, dropping trade: {trade.exchange}:{trade.symbol}"
-            )
+            logger.warning(f"Queue full, dropping trade: {trade.exchange}:{trade.symbol}")
 
     async def _notify_orderbook(self, orderbook: OrderBook) -> None:
         """

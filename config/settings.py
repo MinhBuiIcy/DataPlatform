@@ -204,9 +204,7 @@ class Settings(BaseSettings):
         Each worker needs a connection when executing queries.
         Defaults to DB_WORKERS if not specified.
         """
-        return self._database_config.get("clickhouse", {}).get(
-            "pool_size", self.DB_WORKERS
-        )
+        return self._database_config.get("clickhouse", {}).get("pool_size", self.DB_WORKERS)
 
     # ClickHouse password from .env (secret)
     CLICKHOUSE_PASSWORD: str = Field(default="trading_pass")

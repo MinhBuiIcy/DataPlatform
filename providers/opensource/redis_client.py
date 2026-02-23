@@ -7,7 +7,6 @@ NEW (Phase 2 WebSocket Stability): Uses queued interface pattern from BaseCacheC
 """
 
 import logging
-from datetime import timedelta
 
 from redis.asyncio import Redis
 

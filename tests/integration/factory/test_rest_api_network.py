@@ -9,6 +9,7 @@ pytest -m "not external"
 """
 
 import pytest
+
 from factory.client_factory import create_exchange_rest_api
 
 
@@ -19,9 +20,7 @@ async def test_binance_rest_api_fetch_real_data():
     api = create_exchange_rest_api("binance")
 
     try:
-        candles = await api.fetch_latest_klines(
-            symbol="BTCUSDT", timeframe="1m", limit=5
-        )
+        candles = await api.fetch_latest_klines(symbol="BTCUSDT", timeframe="1m", limit=5)
 
         assert len(candles) > 0
         assert all(c.exchange == "binance" for c in candles)
@@ -49,9 +48,7 @@ async def test_coinbase_rest_api_fetch_real_data():
     api = create_exchange_rest_api("coinbase")
 
     try:
-        candles = await api.fetch_latest_klines(
-            symbol="BTC-USD", timeframe="1m", limit=5
-        )
+        candles = await api.fetch_latest_klines(symbol="BTC-USD", timeframe="1m", limit=5)
 
         assert len(candles) > 0
         assert all(c.exchange == "coinbase" for c in candles)
@@ -69,9 +66,7 @@ async def test_kraken_rest_api_fetch_real_data():
     api = create_exchange_rest_api("kraken")
 
     try:
-        candles = await api.fetch_latest_klines(
-            symbol="BTC/USD", timeframe="1m", limit=5
-        )
+        candles = await api.fetch_latest_klines(symbol="BTC/USD", timeframe="1m", limit=5)
 
         assert len(candles) > 0
         assert all(c.exchange == "kraken" for c in candles)

@@ -11,9 +11,8 @@ Tests the queue + worker + batching pattern for database clients (ClickHouse):
 """
 
 import asyncio
-import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -116,7 +115,7 @@ class TestTimeSeriesDBEnqueueTrades:
         """Verify enqueue_trades() returns count of queued trades"""
         trades = [
             {
-                "timestamp": datetime.now(timezone.utc),
+                "timestamp": datetime.now(UTC),
                 "exchange": "binance",
                 "symbol": "BTC/USDT",
                 "price": 50000.0,

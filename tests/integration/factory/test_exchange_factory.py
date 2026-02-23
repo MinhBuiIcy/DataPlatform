@@ -6,6 +6,7 @@ This validates the factory pattern abstraction layer.
 """
 
 import pytest
+
 from factory.client_factory import create_exchange_rest_api
 from providers.binance.rest_api import BinanceRestAPI
 from providers.coinbase.rest_api import CoinbaseRestAPI

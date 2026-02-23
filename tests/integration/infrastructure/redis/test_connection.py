@@ -5,6 +5,7 @@ Verifies Redis client connects successfully.
 """
 
 import pytest
+
 from providers.opensource.redis_client import RedisClient
 
 

@@ -4,7 +4,7 @@ Unit tests for exchange REST API clients
 Tests BinanceRestAPI, CoinbaseRestAPI, KrakenRestAPI using mocked ccxt responses.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -86,14 +86,10 @@ class TestBinanceRestAPI:
         api = BinanceRestAPI()
 
         # Fetch klines
-        candles = await api.fetch_latest_klines(
-            symbol="BTC/USDT", timeframe="1m", limit=5
-        )
+        candles = await api.fetch_latest_klines(symbol="BTC/USDT", timeframe="1m", limit=5)
 
         # Verify API was called correctly
-        mock_ccxt_binance.fetch_ohlcv.assert_called_once_with(
-            "BTC/USDT", "1m", limit=5
-        )
+        mock_ccxt_binance.fetch_ohlcv.assert_called_once_with("BTC/USDT", "1m", limit=5)
 
         # Verify candles returned
         assert len(candles) == 5
@@ -119,8 +115,8 @@ class TestBinanceRestAPI:
 
         api = BinanceRestAPI()
 
-        start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2024, 1, 1, 0, 5, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2024, 1, 1, 0, 5, 0, tzinfo=UTC)
 
         candles = await api.fetch_klines(
             symbol="BTC/USDT", timeframe="1m", start=start, end=end, limit=10
@@ -143,8 +139,8 @@ class TestBinanceRestAPI:
 
         api = BinanceRestAPI()
 
-        start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2024, 1, 1, 0, 3, 0, tzinfo=timezone.utc)  # Only first 3 candles
+        start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2024, 1, 1, 0, 3, 0, tzinfo=UTC)  # Only first 3 candles
 
         candles = await api.fetch_klines(
             symbol="BTC/USDT", timeframe="1m", start=start, end=end, limit=10
@@ -239,12 +235,10 @@ class TestCoinbaseRestAPI:
 
         api = CoinbaseRestAPI()
 
-        start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
-        end = datetime(2024, 1, 1, 1, 0, 0, tzinfo=timezone.utc)
+        start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=UTC)
+        end = datetime(2024, 1, 1, 1, 0, 0, tzinfo=UTC)
 
-        candles = await api.fetch_klines(
-            symbol="BTC/USD", timeframe="1m", start=start, end=end
-        )
+        candles = await api.fetch_klines(symbol="BTC/USD", timeframe="1m", start=start, end=end)
 
         assert len(candles) > 0
 

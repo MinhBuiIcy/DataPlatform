@@ -218,9 +218,7 @@ class BaseTimeSeriesDB(ABC):
         """
 
     @abstractmethod
-    async def insert_candles(
-        self, candles: list[dict[str, Any]], timeframe: str = "1m"
-    ) -> int:
+    async def insert_candles(self, candles: list[dict[str, Any]], timeframe: str = "1m") -> int:
         """
         Insert OHLCV candles directly (for backfill, bypassing materialized views)
 

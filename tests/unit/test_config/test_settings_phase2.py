@@ -4,7 +4,6 @@ Unit tests for Phase 2 settings configuration
 Tests YAML config loading for sync and indicator service settings.
 """
 
-
 import pytest
 
 from config.settings import Settings, get_settings

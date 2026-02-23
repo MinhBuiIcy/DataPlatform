@@ -91,9 +91,7 @@ async def main():
             f"{', '.join(symbol_names)}{'...' if len(config.symbols) > 5 else ''}"
         )
 
-    logger.info(
-        f"📊 Total: {total_symbols} trading pairs across {len(enabled_configs)} exchanges"
-    )
+    logger.info(f"📊 Total: {total_symbols} trading pairs across {len(enabled_configs)} exchanges")
     logger.info("=" * 70)
 
     # Create WebSocket clients via factory (auto-configured from YAML)

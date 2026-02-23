@@ -8,9 +8,10 @@ where multiple workers insert concurrently (stress test).
 """
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
+
 from providers.opensource.clickhouse import ClickHouseClient
 
 
@@ -41,7 +42,7 @@ async def test_connection_pool_handles_concurrent_queries():
             """Insert a batch of test candles"""
             candles = [
                 {
-                    "timestamp": datetime(2024, 1, 1, 0, i, 0, tzinfo=timezone.utc),
+                    "timestamp": datetime(2024, 1, 1, 0, i, 0, tzinfo=UTC),
                     "exchange": "binance",
                     "symbol": f"TEST{batch_id}USDT",  # Different symbols to avoid conflicts
                     "open": 50000.0 + i,
@@ -58,26 +59,23 @@ async def test_connection_pool_handles_concurrent_queries():
             return await client.insert_candles(candles, timeframe="1m")
 
         # Run 5 concurrent batches (more than pool size)
-        results = await asyncio.gather(
-            *[insert_batch(i) for i in range(5)],
-            return_exceptions=True
-        )
+        results = await asyncio.gather(*[insert_batch(i) for i in range(5)], return_exceptions=True)
 
         # All should succeed
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                pytest.fail(f"Query {i+1} failed: {result}")
+                pytest.fail(f"Query {i + 1} failed: {result}")
 
             # Should return 10 (number of candles inserted)
             assert result == 10
-            print(f"✓ Query {i+1} returned {result} candles inserted")
+            print(f"✓ Query {i + 1} returned {result} candles inserted")
 
         # Verify no "Simultaneous queries" error
         errors = [r for r in results if isinstance(r, Exception)]
         assert len(errors) == 0, "Some queries failed with errors"
 
         print(f"\n✓ All {len(results)} concurrent queries succeeded")
-        print(f"✓ No 'Simultaneous queries' errors")
+        print("✓ No 'Simultaneous queries' errors")
 
         # Verify pool still has all connections
         assert client._pool.qsize() == pool_size

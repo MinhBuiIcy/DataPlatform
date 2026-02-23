@@ -9,17 +9,18 @@ Requires Docker services and synced candle data.
 
 import json
 import os
-from datetime import datetime
 
 import pytest
 import redis
 from clickhouse_driver import Client
 
-from config.settings import get_settings, Settings
+from config.settings import Settings, get_settings
 from services.indicator_service.main import IndicatorService
 
 
-def get_indicator_value(clickhouse_client, exchange, symbol, timeframe, indicator_name, timestamp=None):
+def get_indicator_value(
+    clickhouse_client, exchange, symbol, timeframe, indicator_name, timestamp=None
+):
     """
     Helper function to get indicator value from normalized schema.
 
@@ -34,15 +35,15 @@ def get_indicator_value(clickhouse_client, exchange, symbol, timeframe, indicato
           AND indicator_name = %(indicator_name)s
     """
     params = {
-        'exchange': exchange,
-        'symbol': symbol,
-        'timeframe': timeframe,
-        'indicator_name': indicator_name
+        "exchange": exchange,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "indicator_name": indicator_name,
     }
 
     if timestamp:
         query += " AND timestamp = %(timestamp)s"
-        params['timestamp'] = timestamp
+        params["timestamp"] = timestamp
     else:
         query += " ORDER BY timestamp DESC LIMIT 1"
 
@@ -51,13 +52,13 @@ def get_indicator_value(clickhouse_client, exchange, symbol, timeframe, indicato
 
 
 # Set environment variables for localhost before any imports
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -83,7 +84,9 @@ def clickhouse_client(settings):
 @pytest.fixture(scope="module")
 def redis_client(settings):
     """Create Redis client"""
-    client = redis.Redis(host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
+    client = redis.Redis(
+        host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
+    )
     yield client
     client.close()
 
@@ -97,9 +100,7 @@ async def synced_candles(clickhouse_client):
     Run `uv run python services/sync_service/main.py` before running integration tests.
     """
     # Check if we have candle data (from sync service already running)
-    candle_count = clickhouse_client.execute(
-        "SELECT count() FROM trading.candles_1m FINAL"
-    )[0][0]
+    candle_count = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[0][0]
 
     if candle_count == 0:
         pytest.skip(
@@ -151,8 +152,12 @@ class TestIndicatorPipeline:
                 exchange, symbol, timeframe, timestamp = sample[0]
 
                 # Get indicator values using helper function
-                sma_20 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'SMA_20', timestamp)
-                rsi_14 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'RSI_14', timestamp)
+                sma_20 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "SMA_20", timestamp
+                )
+                rsi_14 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "RSI_14", timestamp
+                )
 
                 print(f"Sample indicator: {exchange} {symbol} {timeframe}")
                 print(f"  SMA_20: {sma_20}")
@@ -167,9 +172,7 @@ class TestIndicatorPipeline:
             await service.stop()
 
     @pytest.mark.asyncio
-    async def test_indicators_saved_to_redis_with_ttl(
-        self, redis_client, synced_candles
-    ):
+    async def test_indicators_saved_to_redis_with_ttl(self, redis_client, synced_candles):
         """Test indicators saved to Redis with correct TTL"""
         service = IndicatorService()
 
@@ -213,9 +216,7 @@ class TestIndicatorPipeline:
             await service.stop()
 
     @pytest.mark.asyncio
-    async def test_sma_ema_rsi_macd_calculations(
-        self, clickhouse_client, synced_candles
-    ):
+    async def test_sma_ema_rsi_macd_calculations(self, clickhouse_client, synced_candles):
         """Test SMA, EMA, RSI, MACD indicators calculated correctly"""
         service = IndicatorService()
 
@@ -241,14 +242,30 @@ class TestIndicatorPipeline:
                 exchange, symbol, timeframe, timestamp = latest_record[0]
 
                 # Fetch all indicator values using helper function
-                sma_20 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'SMA_20', timestamp)
-                sma_50 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'SMA_50', timestamp)
-                ema_12 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'EMA_12', timestamp)
-                ema_26 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'EMA_26', timestamp)
-                rsi_14 = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'RSI_14', timestamp)
-                macd = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'MACD', timestamp)
-                macd_signal = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'MACD_signal', timestamp)
-                macd_histogram = get_indicator_value(clickhouse_client, exchange, symbol, timeframe, 'MACD_histogram', timestamp)
+                sma_20 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "SMA_20", timestamp
+                )
+                sma_50 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "SMA_50", timestamp
+                )
+                ema_12 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "EMA_12", timestamp
+                )
+                ema_26 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "EMA_26", timestamp
+                )
+                rsi_14 = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "RSI_14", timestamp
+                )
+                macd = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "MACD", timestamp
+                )
+                macd_signal = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "MACD_signal", timestamp
+                )
+                macd_histogram = get_indicator_value(
+                    clickhouse_client, exchange, symbol, timeframe, "MACD_histogram", timestamp
+                )
 
                 print(f"\nCalculated indicators for {exchange} {symbol} {timeframe}:")
                 print(f"  SMA_20: {sma_20}")

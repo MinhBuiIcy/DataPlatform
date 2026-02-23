@@ -7,10 +7,11 @@ This validates the Phase 2 candle ingestion pipeline.
 Requires Docker services running.
 """
 
-import pytest
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from factory.client_factory import create_timeseries_db, create_exchange_rest_api
+import pytest
+
+from factory.client_factory import create_exchange_rest_api, create_timeseries_db
 
 
 @pytest.mark.integration
@@ -54,7 +55,9 @@ async def test_candles_from_rest_api():
 
         # Step 4: Verify OHLCV structure
         for candle in queried_candles[:3]:
-            print(f"  Candle: O={candle.open} H={candle.high} L={candle.low} C={candle.close} V={candle.volume}")
+            print(
+                f"  Candle: O={candle.open} H={candle.high} L={candle.low} C={candle.close} V={candle.volume}"
+            )
 
             # Verify OHLC relationships
             assert candle.high >= candle.low, "High should be >= Low"
@@ -91,7 +94,7 @@ async def test_no_open_candle_in_query():
         if candles:
             latest_candle = candles[-1]
             # Use timezone-naive datetime to match ClickHouse (returns naive datetimes)
-            current_minute = datetime.now(timezone.utc).replace(tzinfo=None, second=0, microsecond=0)
+            current_minute = datetime.now(UTC).replace(tzinfo=None, second=0, microsecond=0)
 
             # Latest candle should be at least 1 minute old
             assert latest_candle.timestamp < current_minute, (
@@ -142,7 +145,7 @@ async def test_quote_volume_from_rest_api():
                 # Quote volume should be populated (might be 0 for low-volume periods)
                 assert candle.quote_volume >= 0, "Quote volume should be non-negative"
 
-            print(f"  ✓ Quote volumes populated from REST API")
+            print("  ✓ Quote volumes populated from REST API")
         else:
             print("  ⚠ No candles found")
 

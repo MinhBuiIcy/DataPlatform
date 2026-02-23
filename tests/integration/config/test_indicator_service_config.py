@@ -5,22 +5,22 @@ Tests indicator service configuration and behavior.
 """
 
 import os
+
 import pytest
 from clickhouse_driver import Client
 
-from config.settings import get_settings, Settings
 from config.loader import get_enabled_exchanges
+from config.settings import Settings, get_settings
 from services.indicator_service.main import IndicatorService
 
-
 # Set environment variables for localhost
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -52,9 +52,7 @@ async def synced_candles(clickhouse_client):
     Run `uv run python services/sync_service/main.py` before running integration tests.
     """
     # Check if we have candle data (from sync service already running)
-    candle_count = clickhouse_client.execute(
-        "SELECT count() FROM trading.candles_1m FINAL"
-    )[0][0]
+    candle_count = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[0][0]
 
     if candle_count == 0:
         pytest.skip(
@@ -66,9 +64,7 @@ async def synced_candles(clickhouse_client):
 
 
 @pytest.mark.integration
-async def test_service_respects_min_candles_setting(
-    clickhouse_client, synced_candles
-):
+async def test_service_respects_min_candles_setting(clickhouse_client, synced_candles):
     """Test service skips calculation when insufficient candles"""
     service = IndicatorService()
 
@@ -111,9 +107,7 @@ async def test_service_respects_min_candles_setting(
 
 
 @pytest.mark.integration
-async def test_multi_exchange_indicator_calculation(
-    clickhouse_client, synced_candles
-):
+async def test_multi_exchange_indicator_calculation(clickhouse_client, synced_candles):
     """Test indicators calculated for multiple exchanges"""
     service = IndicatorService()
 

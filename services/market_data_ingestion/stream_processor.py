@@ -17,7 +17,6 @@ It ONLY updates Redis cache for real-time price signals.
 
 import json
 import logging
-from datetime import timedelta
 
 from core.interfaces.cache import BaseCacheClient
 from core.models.market_data import OrderBook, Trade
@@ -98,9 +97,7 @@ class StreamProcessor:
             }
 
             await self.cache_client.set(key, json.dumps(data), ttl_seconds=60)
-            logger.debug(
-                f"Updated orderbook cache: {orderbook.exchange}:{orderbook.symbol}"
-            )
+            logger.debug(f"Updated orderbook cache: {orderbook.exchange}:{orderbook.symbol}")
 
     async def _update_cache(self, trade: Trade) -> None:
         """

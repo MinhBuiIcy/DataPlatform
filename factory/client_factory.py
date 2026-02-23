@@ -282,7 +282,4 @@ def create_exchange_rest_api(exchange_name: str) -> BaseExchangeRestAPI:
         return KrakenRestAPI()
 
     else:
-        raise ValueError(
-            f"Unknown exchange: {exchange_name}. "
-            f"Supported: binance, coinbase, kraken"
-        )
+        raise ValueError(f"Unknown exchange: {exchange_name}. Supported: binance, coinbase, kraken")

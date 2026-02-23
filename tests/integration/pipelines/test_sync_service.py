@@ -13,18 +13,17 @@ from datetime import datetime
 import pytest
 from clickhouse_driver import Client
 
-from config.settings import get_settings, Settings
+from config.settings import Settings, get_settings
 from services.sync_service.main import SyncService
 
-
 # Set environment variables for localhost before any imports
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton to pick up environment variables
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -72,9 +71,7 @@ class TestSyncServicePipeline:
             print(f"\nInitial candle count: {initial_count}")
 
             # Sync BTCUSDT from Binance
-            await service.sync_exchange_klines(
-                exchange_name="binance", symbol="BTCUSDT", limit=10
-            )
+            await service.sync_exchange_klines(exchange_name="binance", symbol="BTCUSDT", limit=10)
 
             # Use FINAL to avoid false negatives from background merges
             final_count = clickhouse_client.execute(
@@ -121,9 +118,7 @@ class TestSyncServicePipeline:
             await service.db.close()
 
     @pytest.mark.asyncio
-    async def test_initial_backfill_fetches_historical_data(
-        self, clickhouse_client, settings
-    ):
+    async def test_initial_backfill_fetches_historical_data(self, clickhouse_client, settings):
         """Test initial_backfill() fetches historical candles"""
         service = SyncService()
 
@@ -141,9 +136,9 @@ class TestSyncServicePipeline:
             await service.initial_backfill()
 
             # Use FINAL to avoid false negatives from background merges
-            final_count = clickhouse_client.execute(
-                "SELECT count() FROM trading.candles_1m FINAL"
-            )[0][0]
+            final_count = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[
+                0
+            ][0]
 
             new_candles = final_count - initial_count
             print(f"Final candles: {final_count}")
@@ -170,9 +165,7 @@ class TestSyncServicePipeline:
             await service.db.close()
 
     @pytest.mark.asyncio
-    async def test_sync_all_exchanges_sequential_processing(
-        self, clickhouse_client, settings
-    ):
+    async def test_sync_all_exchanges_sequential_processing(self, clickhouse_client, settings):
         """Test sync_all_exchanges processes sequentially without errors"""
         service = SyncService()
 
@@ -187,9 +180,9 @@ class TestSyncServicePipeline:
             # Run sync cycle (some exchanges may 429, service should continue gracefully)
             await service.sync_all_exchanges()
 
-            final_count = clickhouse_client.execute(
-                "SELECT count() FROM trading.candles_1m FINAL"
-            )[0][0]
+            final_count = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[
+                0
+            ][0]
 
             print(f"\nCandles before sync: {initial_count}")
             print(f"Candles after sync: {final_count}")
@@ -209,9 +202,7 @@ class TestSyncServicePipeline:
             await service.db.connect()
 
             # Sync small amount of data
-            await service.sync_exchange_klines(
-                exchange_name="binance", symbol="BTCUSDT", limit=3
-            )
+            await service.sync_exchange_klines(exchange_name="binance", symbol="BTCUSDT", limit=3)
 
             # Query recent candles
             candles = clickhouse_client.execute(
@@ -278,9 +269,7 @@ class TestSyncServicePipeline:
             await service.db.connect()
 
             # Sync should create candles in multiple timeframe tables
-            await service.sync_exchange_klines(
-                exchange_name="binance", symbol="BTCUSDT", limit=5
-            )
+            await service.sync_exchange_klines(exchange_name="binance", symbol="BTCUSDT", limit=5)
 
             # Check 1m table (FINAL for consistent deduplicated count)
             count_1m = clickhouse_client.execute(

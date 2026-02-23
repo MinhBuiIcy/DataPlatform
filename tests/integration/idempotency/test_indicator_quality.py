@@ -5,20 +5,20 @@ Tests that calculated indicators are within reasonable ranges.
 """
 
 import os
+
 import pytest
 from clickhouse_driver import Client
 
-from config.settings import get_settings, Settings
-
+from config.settings import Settings, get_settings
 
 # Set environment variables for localhost
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -60,7 +60,7 @@ def test_indicator_values_within_reasonable_ranges(clickhouse_client):
     if stats and stats[0][3] > 0:  # If we have data
         avg_rsi, min_rsi, max_rsi, total = stats[0]
 
-        print(f"\nRSI statistics:")
+        print("\nRSI statistics:")
         print(f"  Average: {avg_rsi:.2f}")
         print(f"  Min: {min_rsi:.2f}")
         print(f"  Max: {max_rsi:.2f}")

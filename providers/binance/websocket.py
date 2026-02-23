@@ -59,6 +59,7 @@ class BinanceWebSocketClient(BaseExchangeWebSocket):
         # Build combined stream URL
         # Format: wss://stream.binance.com:9443/ws/btcusdt@trade/btcusdt@depth@1000ms/...
         from config.loader import get_enabled_exchanges
+
         exchange_configs = get_enabled_exchanges()
         binance_cfg = exchange_configs.get("binance")
         update_ms = binance_cfg.features.orderbook_update_ms if binance_cfg else 1000

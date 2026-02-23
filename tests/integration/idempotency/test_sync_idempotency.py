@@ -12,18 +12,17 @@ import os
 import pytest
 from clickhouse_driver import Client
 
-from config.settings import get_settings, Settings
+from config.settings import Settings, get_settings
 from services.sync_service.main import SyncService
 
-
 # Set environment variables for localhost before any imports
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton to pick up environment variables
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -90,9 +89,9 @@ async def test_multiple_sync_cycles_no_duplicates(clickhouse_client):
         print("\n  Forcing OPTIMIZE to deduplicate...")
         clickhouse_client.execute("OPTIMIZE TABLE trading.candles_1m FINAL")
 
-        optimized_count = clickhouse_client.execute(
-            "SELECT count() FROM trading.candles_1m FINAL"
-        )[0][0]
+        optimized_count = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[
+            0
+        ][0]
 
         print(f"    Candles after OPTIMIZE FINAL: {optimized_count}")
 
@@ -120,9 +119,7 @@ async def test_replacing_merge_tree_deduplication(clickhouse_client, settings):
         await service.db.connect()
 
         # Sync same data twice
-        await service.sync_exchange_klines(
-            exchange_name="binance", symbol="BTCUSDT", limit=5
-        )
+        await service.sync_exchange_klines(exchange_name="binance", symbol="BTCUSDT", limit=5)
 
         count_after_first = clickhouse_client.execute(
             """
@@ -133,9 +130,7 @@ async def test_replacing_merge_tree_deduplication(clickhouse_client, settings):
         )[0][0]
 
         # Sync again (should deduplicate)
-        await service.sync_exchange_klines(
-            exchange_name="binance", symbol="BTCUSDT", limit=5
-        )
+        await service.sync_exchange_klines(exchange_name="binance", symbol="BTCUSDT", limit=5)
 
         count_after_second = clickhouse_client.execute(
             """

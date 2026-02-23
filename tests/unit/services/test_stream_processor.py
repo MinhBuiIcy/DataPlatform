@@ -8,7 +8,7 @@ import sys
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -126,9 +126,7 @@ class TestStreamProcessorProcessTrade:
         assert not hasattr(processor, "timeseries_db")
 
     @pytest.mark.asyncio
-    async def test_process_trade_does_not_send_to_stream(
-        self, mock_cache_client, sample_trade
-    ):
+    async def test_process_trade_does_not_send_to_stream(self, mock_cache_client, sample_trade):
         """Verify StreamProcessor does NOT have stream client"""
         processor = StreamProcessor(cache_client=mock_cache_client)
 
@@ -149,9 +147,7 @@ class TestStreamProcessorProcessOrderbook:
     """Test orderbook processing logic (Redis only)"""
 
     @pytest.mark.asyncio
-    async def test_process_orderbook_updates_cache(
-        self, mock_cache_client, sample_orderbook
-    ):
+    async def test_process_orderbook_updates_cache(self, mock_cache_client, sample_orderbook):
         """Test that process_orderbook updates Redis cache"""
         processor = StreamProcessor(cache_client=mock_cache_client)
         await processor.connect()

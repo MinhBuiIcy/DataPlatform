@@ -17,7 +17,7 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -155,7 +155,7 @@ class IndicatorService:
                             exchange=exchange_name,
                             symbol=symbol,
                             timeframe=timeframe,
-                            limit=catch_up_limit
+                            limit=catch_up_limit,
                         )
 
                         if len(candles) < min_candles:
@@ -167,7 +167,7 @@ class IndicatorService:
                                 continue
 
                             # Get historical window for this candle
-                            historical_candles = candles[max(0, i-99):i+1]
+                            historical_candles = candles[max(0, i - 99) : i + 1]
                             current_candle = candles[i]
 
                             # Calculate indicators
@@ -182,7 +182,9 @@ class IndicatorService:
                         )
 
                     except Exception as e:
-                        logger.error(f"Catch-up failed for {exchange_name}/{symbol}/{timeframe}: {e}")
+                        logger.error(
+                            f"Catch-up failed for {exchange_name}/{symbol}/{timeframe}: {e}"
+                        )
 
         logger.info(f"✅ Catch-up complete: Processed {total_processed} candles")
 
@@ -217,7 +219,7 @@ class IndicatorService:
                 await self.catch_up_indicators()
 
             while self.running:
-                start_time = datetime.now(timezone.utc)
+                start_time = datetime.now(UTC)
                 logger.info(f"\n=== Indicator calculation started at {start_time} ===")
 
                 try:
@@ -225,7 +227,7 @@ class IndicatorService:
                 except Exception as e:
                     logger.error(f"Error in calculation cycle: {e}", exc_info=True)
 
-                elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+                elapsed = (datetime.now(UTC) - start_time).total_seconds()
                 logger.info(f"=== Calculation completed in {elapsed:.2f}s ===\n")
 
                 # Sleep until next cycle

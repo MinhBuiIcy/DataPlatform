@@ -15,7 +15,7 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -94,25 +94,20 @@ class SyncService:
                 )
 
                 if not candles:
-                    logger.warning(
-                        f"No candles fetched for {exchange_name} {symbol} {timeframe}"
-                    )
+                    logger.warning(f"No candles fetched for {exchange_name} {symbol} {timeframe}")
                     continue
 
                 candle_dicts = [c.model_dump() for c in candles]
                 await self.db.insert_candles(candle_dicts, timeframe)
 
                 logger.info(
-                    f"✓ Synced {len(candles)} candles for "
-                    f"{exchange_name} {symbol} {timeframe}"
+                    f"✓ Synced {len(candles)} candles for {exchange_name} {symbol} {timeframe}"
                 )
 
             except Exception as e:
                 logger.error(f"Failed to sync {exchange_name} {symbol} {timeframe}: {e}")
 
-    async def sync_exchange_klines(
-        self, exchange_name: str, symbol: str, limit: int | None = None
-    ):
+    async def sync_exchange_klines(self, exchange_name: str, symbol: str, limit: int | None = None):
         """
         Sync latest klines for one exchange/symbol pair.
         Creates its own API client (used by tests and one-off calls).
@@ -222,7 +217,7 @@ class SyncService:
             await self.initial_backfill()
 
             while self.running:
-                start_time = datetime.now(timezone.utc)
+                start_time = datetime.now(UTC)
                 logger.info(f"\n=== Sync cycle started at {start_time} ===")
 
                 try:
@@ -230,7 +225,7 @@ class SyncService:
                 except Exception as e:
                     logger.error(f"Error in sync cycle: {e}", exc_info=True)
 
-                elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+                elapsed = (datetime.now(UTC) - start_time).total_seconds()
                 logger.info(f"=== Sync cycle completed in {elapsed:.2f}s ===\n")
 
                 # Sleep until next cycle

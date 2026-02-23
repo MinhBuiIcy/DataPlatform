@@ -5,8 +5,8 @@ Tests saving indicators to Redis cache and ClickHouse database.
 """
 
 import json
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, call
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -39,7 +39,7 @@ class TestIndicatorPersistence:
         """Test successful save to both cache and database"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         indicators = {
             "SMA_20": 50000.0,
             "SMA_50": 49900.0,
@@ -72,7 +72,7 @@ class TestIndicatorPersistence:
         """Test cache key formatting"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         indicators = {"SMA_20": 50000.0}
 
         await persistence.save_indicators(
@@ -94,7 +94,7 @@ class TestIndicatorPersistence:
         """Test cache value JSON format"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        timestamp = datetime(2024, 1, 1, 12, 0, 0, tzinfo=UTC)
         indicators = {"SMA_20": 50000.0, "RSI_14": 55.5}
 
         await persistence.save_indicators(
@@ -122,7 +122,7 @@ class TestIndicatorPersistence:
         """Test cache TTL is set to 60 seconds"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         indicators = {"SMA_20": 50000.0}
 
         await persistence.save_indicators(
@@ -144,7 +144,7 @@ class TestIndicatorPersistence:
         """Test that empty indicators are not saved"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         indicators = {}
 
         await persistence.save_indicators(
@@ -167,7 +167,7 @@ class TestIndicatorPersistence:
         # Mock cache failure
         mock_cache.set.side_effect = Exception("Redis connection error")
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         indicators = {"SMA_20": 50000.0}
 
         # Should not raise exception
@@ -190,7 +190,7 @@ class TestIndicatorPersistence:
         # Mock database failure
         mock_db.insert_indicators.side_effect = Exception("ClickHouse connection error")
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         indicators = {"SMA_20": 50000.0}
 
         # Should not raise exception
@@ -260,7 +260,7 @@ class TestIndicatorPersistence:
         """Test saving indicators for multiple symbols"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
         # Save BTC indicators
         await persistence.save_indicators(
@@ -294,7 +294,7 @@ class TestIndicatorPersistence:
         """Test saving indicators for multiple timeframes"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
 
         # Save 1m timeframe
         await persistence.save_indicators(
@@ -324,7 +324,7 @@ class TestIndicatorPersistence:
         """Test saving indicators for multiple exchanges"""
         persistence = IndicatorPersistence(db=mock_db, cache=mock_cache)
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         indicators = {"SMA_20": 50000.0}
 
         # Save Binance

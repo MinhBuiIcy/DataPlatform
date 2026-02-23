@@ -13,13 +13,13 @@ import redis as redis_lib
 from config.settings import Settings, get_settings
 
 # Set environment variables for localhost
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +31,9 @@ def settings():
 @pytest.fixture(scope="module")
 def redis_client(settings):
     """Create Redis client"""
-    client = redis_lib.Redis(host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
+    client = redis_lib.Redis(
+        host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
+    )
     yield client
     client.close()
 

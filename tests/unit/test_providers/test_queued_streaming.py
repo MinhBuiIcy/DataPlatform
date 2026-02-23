@@ -79,6 +79,7 @@ async def blocked_queue_producer(mock_settings):
 
         # Make worker block forever on first item
         event = asyncio.Event()
+
         async def blocked_send(*args):
             await event.wait()  # Never returns
 
@@ -133,9 +134,7 @@ class TestBaseStreamProducerEnqueue:
     @pytest.mark.asyncio
     async def test_enqueue_record_success(self, connected_producer):
         """Verify successful enqueue returns queued status"""
-        result = connected_producer.enqueue_record(
-            "test-topic", {"price": 50000}, "BTC/USDT"
-        )
+        result = connected_producer.enqueue_record("test-topic", {"price": 50000}, "BTC/USDT")
 
         assert result == {"status": "queued"}
         assert connected_producer._queue.qsize() == 1

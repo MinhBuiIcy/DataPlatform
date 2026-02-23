@@ -5,6 +5,7 @@ Verifies ClickHouse client connects successfully.
 """
 
 import pytest
+
 from providers.opensource.clickhouse import ClickHouseClient
 
 

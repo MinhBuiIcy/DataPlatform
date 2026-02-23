@@ -15,10 +15,9 @@ Architecture:
         └─ _write_db() (asyncio.create_task - background)
 """
 
-import asyncio
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from core.interfaces.cache import BaseCacheClient
 from core.interfaces.database import BaseTimeSeriesDB

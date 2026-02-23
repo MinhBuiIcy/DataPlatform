@@ -78,7 +78,9 @@ class MACD(BaseIndicator):
         ...     print("Bullish")
     """
 
-    def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9, name: str = None):
+    def __init__(
+        self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9, name: str = None
+    ):
         """
         Initialize MACD
 

@@ -67,9 +67,9 @@ class ClickHouseClient(BaseTimeSeriesDB):
             try:
                 conn = await self._create_connection()
                 await self._pool.put(conn)
-                logger.debug(f"  ✓ Connection {i+1}/{pool_size} added to pool")
+                logger.debug(f"  ✓ Connection {i + 1}/{pool_size} added to pool")
             except Exception as e:
-                logger.error(f"Failed to create connection {i+1}: {e}")
+                logger.error(f"Failed to create connection {i + 1}: {e}")
                 raise
 
         logger.info(f"✓ ClickHouse pool ready with {pool_size} connections")
@@ -306,9 +306,7 @@ class ClickHouseClient(BaseTimeSeriesDB):
 
             await self._pool.put(conn)
 
-    async def insert_candles(
-        self, candles: list[dict[str, Any]], timeframe: str = "1m"
-    ) -> int:
+    async def insert_candles(self, candles: list[dict[str, Any]], timeframe: str = "1m") -> int:
         """
         Batch insert candles with connection pooling (for backfill, bypassing materialized views)
 

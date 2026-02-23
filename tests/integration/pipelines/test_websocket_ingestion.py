@@ -8,20 +8,20 @@ Requires Docker services running and WebSocket service active.
 """
 
 import os
+
 import pytest
 import redis as redis_lib
 
-from config.settings import get_settings, Settings
-
+from config.settings import Settings, get_settings
 
 # Set environment variables for localhost
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +33,9 @@ def settings():
 @pytest.fixture(scope="module")
 def redis_client(settings):
     """Create Redis client"""
-    client = redis_lib.Redis(host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
+    client = redis_lib.Redis(
+        host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
+    )
     yield client
     client.close()
 
@@ -64,7 +66,7 @@ def test_websocket_writes_to_redis(redis_client):
     print(f"  ✓ Found {len(keys)} latest_price keys")
 
     # Verify data structure - check some sample keys
-    print(f"  Sample latest_price keys:")
+    print("  Sample latest_price keys:")
     for key in list(keys)[:5]:
         key_str = key.decode() if isinstance(key, bytes) else key
         price = redis_client.get(key_str)

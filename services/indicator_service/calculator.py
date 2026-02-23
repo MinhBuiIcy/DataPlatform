@@ -28,9 +28,7 @@ class IndicatorCalculator:
         self.indicators = IndicatorLoader.load_from_settings()
         logger.info(f"Loaded {len(self.indicators)} indicators")
 
-    async def process_candle_with_history(
-        self, candle: Candle, candles: list[Candle]
-    ) -> None:
+    async def process_candle_with_history(self, candle: Candle, candles: list[Candle]) -> None:
         """
         Process a single candle with pre-fetched historical data.
 
@@ -79,6 +77,4 @@ class IndicatorCalculator:
             )
 
         except Exception as e:
-            logger.error(
-                f"Error processing candle {candle.exchange}/{candle.symbol}: {e}"
-            )
+            logger.error(f"Error processing candle {candle.exchange}/{candle.symbol}: {e}")

@@ -57,9 +57,13 @@ class BaseStreamProducer(ABC):
             task = asyncio.create_task(self._worker(), name=f"stream-worker-{i}")
             self._worker_tasks.append(task)
 
-        logger.info(f"Started {settings.STREAM_WORKERS} stream workers (queue size: {settings.STREAM_QUEUE_SIZE})")
+        logger.info(
+            f"Started {settings.STREAM_WORKERS} stream workers (queue size: {settings.STREAM_QUEUE_SIZE})"
+        )
 
-    def enqueue_record(self, stream_name: str, data: dict[str, Any], partition_key: str) -> dict[str, str]:
+    def enqueue_record(
+        self, stream_name: str, data: dict[str, Any], partition_key: str
+    ) -> dict[str, str]:
         """
         Enqueue record for sending (SYNC, NON-BLOCKING)
 

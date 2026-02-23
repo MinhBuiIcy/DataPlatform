@@ -6,21 +6,21 @@ Tests full data flow: Exchange REST API → Sync Service → ClickHouse → Indi
 This is the MOST CRITICAL integration test - it validates the entire Phase 2 architecture end-to-end.
 """
 
-import asyncio
 import json
 import os
-from datetime import datetime, timezone
 
 import pytest
 import redis
 from clickhouse_driver import Client
 
-from config.settings import get_settings, Settings
+from config.settings import Settings, get_settings
 from services.indicator_service.main import IndicatorService
 from services.sync_service.main import SyncService
 
 
-def get_indicator_value(clickhouse_client, exchange, symbol, timeframe, indicator_name, timestamp=None):
+def get_indicator_value(
+    clickhouse_client, exchange, symbol, timeframe, indicator_name, timestamp=None
+):
     """
     Helper function to get indicator value from normalized schema.
 
@@ -35,15 +35,15 @@ def get_indicator_value(clickhouse_client, exchange, symbol, timeframe, indicato
           AND indicator_name = %(indicator_name)s
     """
     params = {
-        'exchange': exchange,
-        'symbol': symbol,
-        'timeframe': timeframe,
-        'indicator_name': indicator_name
+        "exchange": exchange,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "indicator_name": indicator_name,
     }
 
     if timestamp:
         query += " AND timestamp = %(timestamp)s"
-        params['timestamp'] = timestamp
+        params["timestamp"] = timestamp
     else:
         query += " ORDER BY timestamp DESC LIMIT 1"
 
@@ -52,13 +52,13 @@ def get_indicator_value(clickhouse_client, exchange, symbol, timeframe, indicato
 
 
 # Set environment variables for localhost
-os.environ['CLICKHOUSE_HOST'] = 'localhost'
-os.environ['REDIS_HOST'] = 'localhost'
-os.environ['POSTGRES_HOST'] = 'localhost'
+os.environ["CLICKHOUSE_HOST"] = "localhost"
+os.environ["REDIS_HOST"] = "localhost"
+os.environ["POSTGRES_HOST"] = "localhost"
 
 # Reset settings singleton
-if hasattr(Settings, '_yaml_loaded'):
-    delattr(Settings, '_yaml_loaded')
+if hasattr(Settings, "_yaml_loaded"):
+    delattr(Settings, "_yaml_loaded")
 
 
 @pytest.fixture(scope="module")
@@ -84,7 +84,9 @@ def clickhouse_client(settings):
 @pytest.fixture(scope="module")
 def redis_client(settings):
     """Create Redis client"""
-    client = redis.Redis(host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True)
+    client = redis.Redis(
+        host="localhost", port=settings.REDIS_PORT, db=settings.REDIS_DB, decode_responses=True
+    )
     yield client
     client.close()
 
@@ -116,12 +118,12 @@ async def test_full_phase2_pipeline(clickhouse_client, redis_client, settings):
 
     # Step 1: Get initial state (don't clear production data)
     print("\n[1/7] Getting initial state...")
-    initial_candles = clickhouse_client.execute(
-        "SELECT count() FROM trading.candles_1m FINAL"
-    )[0][0]
-    initial_indicators = clickhouse_client.execute(
-        "SELECT count() FROM trading.indicators FINAL"
-    )[0][0]
+    initial_candles = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[0][
+        0
+    ]
+    initial_indicators = clickhouse_client.execute("SELECT count() FROM trading.indicators FINAL")[
+        0
+    ][0]
     print(f"  Initial candles: {initial_candles}")
     print(f"  Initial indicators: {initial_indicators}")
 
@@ -144,9 +146,7 @@ async def test_full_phase2_pipeline(clickhouse_client, redis_client, settings):
 
     # Step 3: Verify candles in ClickHouse
     print("\n[3/7] Verifying candles in ClickHouse...")
-    candle_count = clickhouse_client.execute(
-        "SELECT count() FROM trading.candles_1m FINAL"
-    )[0][0]
+    candle_count = clickhouse_client.execute("SELECT count() FROM trading.candles_1m FINAL")[0][0]
 
     print(f"  Candles after sync: {candle_count}")
     assert candle_count >= initial_candles, "Sync should not delete candles"
@@ -161,9 +161,7 @@ async def test_full_phase2_pipeline(clickhouse_client, redis_client, settings):
         """
     )[0]
 
-    exchange, symbol, timestamp, open_, high, low, close, volume = (
-        sample_candle
-    )
+    exchange, symbol, timestamp, open_, high, low, close, volume = sample_candle
     print(f"  Sample candle: {exchange} {symbol} 1m")
     print(f"    OHLC: {open_}/{high}/{low}/{close}, Volume: {volume}")
 
@@ -213,9 +211,9 @@ async def test_full_phase2_pipeline(clickhouse_client, redis_client, settings):
 
     # Step 6: Verify indicators in ClickHouse
     print("\n[6/7] Verifying indicators in ClickHouse...")
-    indicator_count = clickhouse_client.execute(
-        "SELECT count() FROM trading.indicators FINAL"
-    )[0][0]
+    indicator_count = clickhouse_client.execute("SELECT count() FROM trading.indicators FINAL")[0][
+        0
+    ]
 
     print(f"  Indicators in ClickHouse: {indicator_count}")
     assert indicator_count > 0, "No indicators in ClickHouse"
@@ -233,13 +231,21 @@ async def test_full_phase2_pipeline(clickhouse_client, redis_client, settings):
 
     if len(sample_record) > 0:
         ind_exchange, ind_symbol, ind_timestamp = sample_record[0]
-        ind_timeframe = '1m'  # Hardcoded - indicators are calculated from candles_1m
+        ind_timeframe = "1m"  # Hardcoded - indicators are calculated from candles_1m
 
         # Fetch indicator values using helper
-        sma_20 = get_indicator_value(clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, 'SMA_20', ind_timestamp)
-        ema_12 = get_indicator_value(clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, 'EMA_12', ind_timestamp)
-        rsi_14 = get_indicator_value(clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, 'RSI_14', ind_timestamp)
-        macd = get_indicator_value(clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, 'MACD', ind_timestamp)
+        sma_20 = get_indicator_value(
+            clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, "SMA_20", ind_timestamp
+        )
+        ema_12 = get_indicator_value(
+            clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, "EMA_12", ind_timestamp
+        )
+        rsi_14 = get_indicator_value(
+            clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, "RSI_14", ind_timestamp
+        )
+        macd = get_indicator_value(
+            clickhouse_client, ind_exchange, ind_symbol, ind_timeframe, "MACD", ind_timestamp
+        )
 
         print(f"  Sample indicator: {ind_exchange} {ind_symbol} {ind_timeframe}")
         print(f"    SMA_20: {sma_20}")
