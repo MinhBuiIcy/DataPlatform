@@ -9,7 +9,7 @@ import logging
 from config.settings import get_settings
 from core.interfaces.cache import BaseCacheClient
 from core.interfaces.database import BaseTimeSeriesDB
-from core.interfaces.market_data import BaseExchangeWebSocket
+from core.interfaces.market_data import BaseExchangeRestAPI, BaseExchangeWebSocket
 from core.interfaces.storage import BaseStorageClient
 from core.interfaces.streaming_consumer import BaseStreamConsumer
 from core.interfaces.streaming_producer import BaseStreamProducer
@@ -230,3 +230,59 @@ def create_exchange_websockets() -> list[BaseExchangeWebSocket]:
         f"✓ Created {len(exchanges)} exchange WebSocket clients: {list(enabled_configs.keys())}"
     )
     return exchanges
+
+
+def create_exchange_rest_api(exchange_name: str) -> BaseExchangeRestAPI:
+    """
+    Factory method for creating exchange REST API clients.
+
+    Industry standard: Use REST API for authoritative OHLCV/klines data.
+    WebSocket trades only capture ~4% of volume, REST is authoritative.
+
+    Args:
+        exchange_name: Exchange identifier ("binance", "coinbase", "kraken")
+
+    Returns:
+        BaseExchangeRestAPI implementation for the specified exchange
+
+    Examples:
+        >>> # Create Binance REST API client
+        >>> api = create_exchange_rest_api("binance")
+        >>> candles = await api.fetch_latest_klines("BTC/USDT", "1m", limit=100)
+        >>>
+        >>> # Fetch historical range
+        >>> from datetime import datetime, timezone, timedelta
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(hours=1)
+        >>> candles = await api.fetch_klines("BTC/USDT", "1m", start, end)
+        >>>
+        >>> await api.close()
+
+    Raises:
+        ValueError: If exchange_name is not supported
+    """
+    exchange_lower = exchange_name.lower()
+
+    if exchange_lower == "binance":
+        from providers.binance.rest_api import BinanceRestAPI
+
+        logger.info("✓ Creating BinanceRestAPI")
+        return BinanceRestAPI()
+
+    elif exchange_lower == "coinbase":
+        from providers.coinbase.rest_api import CoinbaseRestAPI
+
+        logger.info("✓ Creating CoinbaseRestAPI")
+        return CoinbaseRestAPI()
+
+    elif exchange_lower == "kraken":
+        from providers.kraken.rest_api import KrakenRestAPI
+
+        logger.info("✓ Creating KrakenRestAPI")
+        return KrakenRestAPI()
+
+    else:
+        raise ValueError(
+            f"Unknown exchange: {exchange_name}. "
+            f"Supported: binance, coinbase, kraken"
+        )
