@@ -35,14 +35,15 @@ class RSI(BaseIndicator):
         ...     print("Overbought")
     """
 
-    def __init__(self, period: int = 14):
+    def __init__(self, period: int = 14, name: str = None):
         """
         Initialize RSI
 
         Args:
             period: Look-back period (default: 14)
+            name: Custom name for this indicator (e.g., "RSI_14"). If None, uses class name.
         """
-        super().__init__(period=period)
+        super().__init__(period=period, name=name)
 
     def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate RSI"""
@@ -77,7 +78,7 @@ class MACD(BaseIndicator):
         ...     print("Bullish")
     """
 
-    def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9):
+    def __init__(self, fast_period: int = 12, slow_period: int = 26, signal_period: int = 9, name: str = None):
         """
         Initialize MACD
 
@@ -85,9 +86,10 @@ class MACD(BaseIndicator):
             fast_period: Fast EMA period (default: 12)
             slow_period: Slow EMA period (default: 26)
             signal_period: Signal line EMA period (default: 9)
+            name: Custom name for this indicator (e.g., "MACD"). If None, uses class name.
         """
         # Use slow_period as the main period for validation
-        super().__init__(period=slow_period, fast=fast_period, signal=signal_period)
+        super().__init__(period=slow_period, name=name, fast=fast_period, signal=signal_period)
         self.fast_period = fast_period
         self.slow_period = slow_period
         self.signal_period = signal_period
@@ -134,16 +136,16 @@ class MACD(BaseIndicator):
         Override to return all MACD components
 
         Returns:
-            Dict with MACD, MACD_signal, MACD_histogram
+            Dict with MACD, MACD_signal, MACD_histogram (using self.name as prefix)
         """
         result = self.calculate_full(candles)
         if not result:
             return {}
 
         return {
-            "MACD": result["macd"],
-            "MACD_signal": result["signal"],
-            "MACD_histogram": result["histogram"],
+            self.name: result["macd"],
+            f"{self.name}_signal": result["signal"],
+            f"{self.name}_histogram": result["histogram"],
         }
 
 

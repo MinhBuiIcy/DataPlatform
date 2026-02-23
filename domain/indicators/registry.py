@@ -27,30 +27,30 @@ class IndicatorRegistry:
     }
 
     @classmethod
-    def create(cls, name: str, **params) -> BaseIndicator:
+    def create(cls, indicator_type: str, **params) -> BaseIndicator:
         """
-        Create indicator by name
+        Create indicator by type
 
         Args:
-            name: Indicator name (sma, ema, rsi, macd, etc.)
-            **params: Indicator parameters
+            indicator_type: Indicator type (sma, ema, rsi, macd, etc.)
+            **params: Indicator parameters (including optional 'name' for custom naming)
 
         Returns:
             Indicator instance
 
         Raises:
-            ValueError: If indicator name is not found
+            ValueError: If indicator type is not found
 
         Example:
             >>> registry = IndicatorRegistry()
-            >>> sma = registry.create("sma", period=20)
-            >>> rsi = registry.create("rsi", period=14)
-            >>> macd = registry.create("macd", fast_period=12, slow_period=26)
+            >>> sma = registry.create("sma", period=20, name="SMA_20")
+            >>> rsi = registry.create("rsi", period=14, name="RSI_14")
+            >>> macd = registry.create("macd", fast_period=12, slow_period=26, name="MACD")
         """
-        indicator_class = cls._indicators.get(name.lower())
+        indicator_class = cls._indicators.get(indicator_type.lower())
         if not indicator_class:
             available = ", ".join(cls._indicators.keys())
-            raise ValueError(f"Unknown indicator: {name}. Available: {available}")
+            raise ValueError(f"Unknown indicator: {indicator_type}. Available: {available}")
 
         return indicator_class(**params)
 

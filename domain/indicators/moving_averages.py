@@ -30,6 +30,16 @@ class SMA(BaseIndicator):
         >>> value = sma.calculate(candles)
     """
 
+    def __init__(self, period: int, name: str = None):
+        """
+        Initialize SMA
+
+        Args:
+            period: Look-back period
+            name: Custom name for this indicator (e.g., "SMA_20"). If None, uses class name.
+        """
+        super().__init__(period=period, name=name)
+
     def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate SMA"""
         self.validate_input(candles)
@@ -60,6 +70,16 @@ class EMA(BaseIndicator):
         >>> ema = EMA(period=50)
         >>> value = ema.calculate(candles)
     """
+
+    def __init__(self, period: int, name: str = None):
+        """
+        Initialize EMA
+
+        Args:
+            period: Look-back period
+            name: Custom name for this indicator (e.g., "EMA_12"). If None, uses class name.
+        """
+        super().__init__(period=period, name=name)
 
     def calculate(self, candles: list[Candle]) -> float | None:
         """Calculate EMA"""
