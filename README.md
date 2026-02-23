@@ -98,258 +98,114 @@ Replace LocalStack endpoints with real AWS services
 DataPlatform/
 │
 ├── 📁 config/                           # Configuration Management
-│   ├── __init__.py
-│   ├── settings.py                      # Pydantic Settings (from .env)
-│   ├── base.py                          # Base config classes
-│   │
-│   ├── environments/                    # Environment-specific configs
-│   │   ├── local.yaml                   # LocalStack + Docker
-│   │   ├── dev.yaml
-│   │   ├── staging.yaml
-│   │   └── production.yaml
-│   │
-│   └── providers/                       # Cloud provider configs
-│       ├── aws.yaml
-│       ├── gcp.yaml
-│       ├── azure.yaml
-│       └── localstack.yaml
+│   ├── settings.py                      # Pydantic Settings (from .env + YAML)
+│   ├── loader.py                        # YAML config loaders
+│   └── providers/                       # Per-service YAML configs
+│       ├── databases.yaml               # ClickHouse, Redis, PostgreSQL
+│       ├── exchanges.yaml               # WebSocket + REST API per exchange
+│       ├── indicators.yaml              # Indicator definitions + service settings
+│       ├── streaming.yaml               # Kafka/Kinesis topics
+│       ├── storage.yaml                 # S3/GCS object storage
+│       └── sync.yaml                    # Sync Service timing + REST API config
 │
 ├── 📁 core/                             # Core Abstractions (Cloud-agnostic)
-│   ├── __init__.py
-│   │
 │   ├── interfaces/                      # Abstract Base Classes
-│   │   ├── storage.py                   # BaseStorageClient (S3, GCS, Blob)
-│   │   ├── streaming.py                 # BaseStreamClient (Kinesis, Kafka, Pub/Sub)
 │   │   ├── cache.py                     # BaseCacheClient (Redis, Memcached)
 │   │   ├── database.py                  # BaseTimeSeriesDB (ClickHouse, TimescaleDB)
-│   │   ├── queue.py                     # BaseQueueClient (SQS, Cloud Tasks)
-│   │   ├── pubsub.py                    # BasePubSubClient (SNS, Pub/Sub)
-│   │   ├── secrets.py                   # BaseSecretsManager
-│   │   └── serverless.py                # BaseFunctionClient (Lambda, Cloud Functions)
-│   │
-│   ├── models/                          # Data Models (Pydantic)
-│   │   ├── market_data.py               # Tick, Candle, OrderBook models
-│   │   ├── trading.py                   # Order, Position, Trade models
-│   │   ├── strategy.py                  # Strategy, Signal models
-│   │   └── events.py                    # Event schemas
-│   │
-│   ├── exceptions/                      # Custom Exceptions
-│   │   ├── base.py                      # BasePlatformException
-│   │   ├── storage.py                   # StorageException
-│   │   ├── streaming.py                 # StreamException
-│   │   ├── trading.py                   # InsufficientBalance, InvalidOrder
-│   │   └── market_data.py               # MarketDataException
-│   │
-│   └── utils/                           # Shared Utilities
-│       ├── logger.py                    # Structured logging (JSON)
-│       ├── retry.py                     # Retry with exponential backoff
-│       ├── circuit_breaker.py           # Circuit breaker pattern
-│       ├── time_utils.py                # Timezone, timestamp utils
-│       ├── validation.py                # Data validation
-│       └── metrics.py                   # Prometheus metrics
+│   │   ├── market_data.py               # BaseExchangeWebSocket + BaseExchangeRestAPI
+│   │   ├── indicators.py                # BaseIndicator
+│   │   ├── storage.py                   # BaseStorageClient (S3, GCS)
+│   │   ├── streaming_producer.py        # BaseStreamProducer (Kafka, Kinesis)
+│   │   └── streaming_consumer.py        # BaseStreamConsumer
+│   ├── models/
+│   │   └── market_data.py               # Trade, Candle, OrderBook (Pydantic)
+│   ├── validators/
+│   │   └── market_data.py               # Spike detection, crossed book checks
+│   └── utils/
+│       └── config.py                    # load_yaml_safe()
 │
 ├── 📁 providers/                        # Cloud Provider Implementations
-│   ├── __init__.py
-│   │
-│   ├── aws/                             # AWS Services
-│   │   ├── s3.py                        # S3StorageClient
-│   │   ├── kinesis.py                   # KinesisStreamClient
-│   │   ├── dynamodb.py                  # DynamoDBClient
-│   │   ├── sqs.py                       # SQSQueueClient
-│   │   ├── sns.py                       # SNSPubSubClient
-│   │   ├── lambda_client.py             # LambdaClient
-│   │   ├── secrets_manager.py           # AWSSecretsManager
-│   │   └── eventbridge.py               # EventBridgeClient
-│   │
-│   ├── gcp/                             # Google Cloud Platform
-│   │   ├── gcs.py                       # GCSStorageClient
-│   │   ├── pubsub.py                    # PubSubClient
-│   │   ├── bigquery.py                  # BigQueryClient
-│   │   ├── cloud_functions.py           # CloudFunctionClient
-│   │   └── secret_manager.py            # GCPSecretsManager
-│   │
-│   ├── azure/                           # Microsoft Azure
-│   │   ├── blob_storage.py              # BlobStorageClient
-│   │   ├── event_hub.py                 # EventHubClient
-│   │   ├── service_bus.py               # ServiceBusClient
-│   │   └── key_vault.py                 # KeyVaultSecretsManager
-│   │
-│   ├── localstack/                      # LocalStack (AWS Emulation)
-│   │   ├── s3.py                        # LocalStackS3Client
-│   │   ├── kinesis.py                   # LocalStackKinesisClient
-│   │   ├── lambda_client.py
-│   │   └── sqs.py
-│   │
-│   ├── s3_compatible/                   # S3-compatible Storage
-│   │   ├── minio.py                     # MinIOStorageClient
-│   │   └── r2.py                        # CloudflareR2Client
-│   │
-│   └── opensource/                      # Open-source Alternatives
-│       ├── kafka.py                     # KafkaStreamClient
-│       ├── redis_client.py              # RedisClient
-│       ├── clickhouse.py                # ClickHouseClient
-│       └── postgres.py                  # PostgresClient
+│   ├── aws/
+│   │   ├── kinesis.py                   # KinesisStreamProducer
+│   │   └── s3.py                        # S3StorageClient
+│   ├── opensource/
+│   │   ├── clickhouse.py                # ClickHouseClient (connection pool)
+│   │   ├── redis_client.py              # RedisClient (queued writes)
+│   │   └── kafka_stream_producer.py     # KafkaStreamProducer
+│   ├── binance/
+│   │   ├── websocket.py                 # BinanceWebSocket
+│   │   └── rest_api.py                  # BinanceRestAPI (ccxt)
+│   ├── coinbase/
+│   │   ├── websocket.py                 # CoinbaseWebSocket
+│   │   └── rest_api.py                  # CoinbaseRestAPI (ccxt)
+│   └── kraken/
+│       ├── websocket.py                 # KrakenWebSocket
+│       └── rest_api.py                  # KrakenRestAPI (ccxt)
 │
-├── 📁 factory/                          # Factory Pattern
-│   ├── __init__.py
-│   ├── client_factory.py                # Main factory
-│   ├── storage_factory.py               # create_storage_client()
-│   ├── streaming_factory.py             # create_stream_client()
-│   ├── cache_factory.py                 # create_cache_client()
-│   └── database_factory.py              # create_timeseries_db()
+├── 📁 factory/
+│   └── client_factory.py                # create_exchange_rest_api(), create_timeseries_db(), etc.
 │
-├── 📁 domain/                           # Business Logic (Trading Domain)
-│   ├── __init__.py
-│   │
-│   ├── strategies/                      # Trading Strategies
-│   │   ├── base.py                      # BaseStrategy (abstract)
-│   │   ├── ma_crossover.py              # Moving Average Crossover
-│   │   ├── rsi_strategy.py              # RSI-based
-│   │   ├── mean_reversion.py            # Mean reversion
-│   │   ├── ml_strategy.py               # ML-based
-│   │   └── registry.py                  # Strategy registry
-│   │
-│   ├── indicators/                      # Technical Indicators
-│   │   ├── base.py                      # BaseIndicator
-│   │   ├── moving_averages.py           # SMA, EMA, WMA
-│   │   ├── momentum.py                  # RSI, MACD, Stochastic
-│   │   ├── volatility.py                # Bollinger Bands, ATR
-│   │   └── volume.py                    # OBV, VWAP
-│   │
-│   ├── risk/                            # Risk Management
-│   │   ├── position_sizer.py            # Kelly Criterion, Fixed %
-│   │   ├── stop_loss.py                 # Stop-loss strategies
-│   │   ├── portfolio_manager.py         # Multi-strategy portfolio
-│   │   └── risk_limits.py               # Position limits, drawdown
-│   │
-│   ├── backtesting/                     # Backtesting Engine
-│   │   ├── engine.py                    # BacktestEngine
-│   │   ├── metrics.py                   # Sharpe, Sortino, etc.
-│   │   ├── optimizer.py                 # Parameter optimization
-│   │   └── report.py                    # Report generator
-│   │
-│   └── execution/                       # Order Execution
-│       ├── paper_trading.py             # Paper trading simulator
-│       ├── order_manager.py             # Order management
-│       └── position_tracker.py          # Position tracking
+├── 📁 domain/                           # Business Logic
+│   └── indicators/
+│       ├── moving_averages.py           # SMA, EMA, WMA
+│       ├── momentum.py                  # RSI, MACD, Stochastic
+│       └── registry.py                  # Load indicators from config
 │
-├── 📁 services/                         # Microservices
-│   ├── __init__.py
-│   │
-│   ├── market_data_ingestion/           # Real-time Data Ingestion
-│   │   ├── main.py                      # Entry point
-│   │   ├── websocket_client.py          # Binance/Coinbase WS
-│   │   ├── stream_processor.py          # Send to Kinesis
-│   │   ├── data_validator.py            # Validate data
-│   │   └── Dockerfile
-│   │
-│   ├── stream_processor/                # Lambda/Function Processing
-│   │   ├── handler.py                   # Lambda handler
-│   │   ├── aggregator.py                # Ticks → Candles
-│   │   └── requirements.txt
-│   │
-│   ├── strategy_engine/                 # Strategy Execution
+├── 📁 services/                         # Microservices (Phase 2)
+│   ├── market_data_ingestion/           # WebSocket → Redis (real-time signals)
 │   │   ├── main.py
-│   │   ├── executor.py                  # Execute strategies
-│   │   ├── signal_processor.py          # Process signals
-│   │   └── Dockerfile
-│   │
-│   ├── trading_api/                     # REST/WebSocket API
-│   │   ├── main.py                      # FastAPI app
-│   │   ├── routes/
-│   │   │   ├── prices.py                # GET /prices/{symbol}
-│   │   │   ├── candles.py               # GET /candles/{symbol}
-│   │   │   ├── indicators.py            # GET /indicators/{symbol}
-│   │   │   ├── strategies.py            # Strategy CRUD
-│   │   │   ├── orders.py                # Order management
-│   │   │   └── websocket.py             # WebSocket endpoint
-│   │   ├── dependencies.py
-│   │   ├── middleware.py
-│   │   └── Dockerfile
-│   │
-│   └── ml_pipeline/                     # ML Training & Inference
-│       ├── feature_engineering.py
-│       ├── train.py
-│       ├── inference.py
-│       └── requirements.txt
+│   │   ├── stream_processor.py
+│   │   └── websocket_client.py
+│   ├── sync_service/                    # REST API → ClickHouse (authoritative candles)
+│   │   └── main.py                      # Runs every 60s, backfills 100 candles on startup
+│   └── indicator_service/               # ClickHouse → Calculate → Redis + ClickHouse
+│       ├── main.py                      # Runs every 60s (+10s delay after sync)
+│       ├── calculator.py
+│       ├── persistence.py
+│       └── indicator_loader.py
 │
-├── 📁 infrastructure/                   # Infrastructure as Code
-│   │
-│   ├── cdk/                             # AWS CDK (Python)
-│   │   ├── app.py
-│   │   └── stacks/
-│   │       ├── storage_stack.py         # S3 buckets
-│   │       ├── streaming_stack.py       # Kinesis streams
-│   │       ├── lambda_stack.py          # Lambda functions
-│   │       ├── api_stack.py             # API Gateway
-│   │       └── monitoring_stack.py      # CloudWatch
-│   │
-│   ├── terraform/                       # Terraform (Alternative)
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── modules/
-│   │
-│   ├── docker/                          # Docker Configs
-│   │   ├── docker-compose.local.yml     # LocalStack + services
-│   │   ├── docker-compose.cloud.yml
-│   │   └── Dockerfile.base
-│   │
-│   └── kubernetes/                      # Kubernetes Manifests
-│       ├── deployments/
-│       ├── services/
-│       └── configmaps/
+├── 📁 infrastructure/
+│   ├── docker/
+│   │   ├── docker-compose.yml           # ClickHouse, Redis, PostgreSQL, Grafana
+│   │   └── clickhouse/
+│   │       ├── init-and-migrate.sh      # Auto-applies migrations on startup
+│   │       └── migrations/              # 000–006 SQL migrations
+│   └── terraform/                       # LocalStack (S3, Kinesis)
 │
-├── 📁 scripts/                          # Utility Scripts
-│   ├── init_project_structure.py        # Initialize project
-│   ├── download_historical_data.py      # Download market data
-│   ├── load_data_to_clickhouse.py       # Load to ClickHouse
-│   ├── generate_synthetic_data.py       # Generate test data
-│   └── run_backtest.py                  # CLI backtest
+├── 📁 monitoring/
+│   └── grafana/
+│       ├── dashboards/
+│       │   └── technical-analysis.json  # Price+Indicators, RSI, MACD, Volume
+│       └── provisioning/
+│           └── datasources.yml          # ClickHouse, Prometheus, PostgreSQL
 │
-├── 📁 notebooks/                        # Jupyter Notebooks
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_indicator_analysis.ipynb
-│   ├── 03_strategy_backtest.ipynb
-│   ├── 04_ml_feature_engineering.ipynb
-│   └── 05_model_training.ipynb
+├── 📁 tests/
+│   ├── unit/                            # 183 tests, no Docker required
+│   │   ├── indicators/                  # SMA, EMA, RSI, MACD
+│   │   ├── services/                    # stream_processor, websocket_client
+│   │   ├── test_config/                 # Settings Phase 2
+│   │   ├── test_providers/              # ClickHouse pool, queued cache/db/streaming, REST API
+│   │   ├── test_services/               # indicator calculator + persistence
+│   │   ├── test_factory.py
+│   │   └── test_models.py
+│   └── integration/                     # Requires Docker + Terraform
+│       ├── pipelines/                   # End-to-end pipeline tests
+│       ├── infrastructure/              # ClickHouse, Redis, Docker readiness
+│       ├── idempotency/                 # Candle/indicator/cache quality
+│       └── factory/                     # Exchange factory + REST API network
 │
-├── 📁 tests/                            # Tests
-│   ├── unit/                            # Unit tests
-│   │   ├── test_indicators.py
-│   │   ├── test_strategies.py
-│   │   └── test_providers/
-│   ├── integration/                     # Integration tests
-│   │   ├── test_stream_pipeline.py
-│   │   └── test_api.py
-│   └── fixtures/                        # Test fixtures
-│
-├── 📁 data/                             # Data Storage (gitignored)
-│   ├── raw/                             # Raw market data
-│   ├── processed/                       # Processed candles
-│   ├── models/                          # Trained ML models
-│   ├── backtest_results/                # Backtest outputs
-│   └── logs/                            # Application logs
-│
-├── 📁 docs/                             # Documentation
-│   ├── architecture.md
-│   ├── api.md
-│   ├── deployment.md
-│   └── diagrams/
-│
-├── 📁 monitoring/                       # Monitoring & Observability
-│   ├── grafana/
-│   │   ├── dashboards/
-│   │   └── provisioning/
-│   └── prometheus/
-│       └── prometheus.yml
+├── 📁 docs/
+│   ├── DOCKER_SETUP.md
+│   ├── TERRAFORM_SETUP.md
+│   ├── KINESIS_VS_KAFKA.md              # Architecture decision record
+│   ├── COMPARISON.md
+│   └── WHEN_TO_USE_CLOUD_DB.md
 │
 ├── .env.example                         # Environment template
-├── .gitignore                           # Git ignore rules
-├── pyproject.toml                       # Poetry dependencies
-├── requirements.txt                     # Pip dependencies
-├── Makefile                             # Common commands
-├── README.md                            # This file
-└── LICENSE
+├── .gitignore
+├── pyproject.toml                       # uv dependencies
+├── Makefile                             # docker-up/down, terraform-apply, etc.
+└── CLAUDE.md                            # AI assistant context + architecture guide
 ```
 
 ### 🔑 Key Design Principles
