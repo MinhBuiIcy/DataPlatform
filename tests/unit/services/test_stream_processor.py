@@ -1,65 +1,32 @@
 """
-Unit tests for StreamProcessor
+Unit tests for StreamProcessor (Phase 2 - Redis ONLY)
 
-Mocks all dependencies (Stream, Storage, TimeSeriesDB, Cache) to test orchestration logic
+Tests simplified Redis-only functionality.
 """
 
 import sys
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 project_root = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from core.models.market_data import Trade
+from core.models.market_data import OrderBook, Trade
 from services.market_data_ingestion.stream_processor import StreamProcessor
 
 
 @pytest.fixture
-def mock_clients():
-    """Fixture to mock all client dependencies"""
-    with (
-        patch(
-            "services.market_data_ingestion.stream_processor.create_stream_producer"
-        ) as mock_stream_factory,
-        patch(
-            "services.market_data_ingestion.stream_processor.create_storage_client"
-        ) as mock_storage_factory,
-        patch(
-            "services.market_data_ingestion.stream_processor.create_timeseries_db"
-        ) as mock_timeseries_factory,
-        patch(
-            "services.market_data_ingestion.stream_processor.create_cache_client"
-        ) as mock_cache_factory,
-        patch("services.market_data_ingestion.stream_processor.get_settings") as mock_settings,
-    ):
-        # Create mock clients
-        mock_stream = AsyncMock()
-        mock_storage = AsyncMock()
-        mock_timeseries = AsyncMock()
-        mock_cache = AsyncMock()
-
-        # Factory returns mocks
-        mock_stream_factory.return_value = mock_stream
-        mock_storage_factory.return_value = mock_storage
-        mock_timeseries_factory.return_value = mock_timeseries
-        mock_cache_factory.return_value = mock_cache
-
-        # Mock settings
-        mock_settings.return_value.STREAM_MARKET_TRADES = "test-stream"
-        mock_settings.return_value.S3_BUCKET_RAW_DATA = "test-bucket"
-
-        yield {
-            "stream": mock_stream,
-            "storage": mock_storage,
-            "timeseries": mock_timeseries,
-            "cache": mock_cache,
-            "settings": mock_settings,
-        }
+def mock_cache_client():
+    """Fixture to mock Redis cache client"""
+    mock_cache = AsyncMock()
+    mock_cache.connect = AsyncMock()
+    mock_cache.set = AsyncMock()
+    mock_cache.close = AsyncMock()
+    return mock_cache
 
 
 @pytest.fixture
@@ -77,213 +44,159 @@ def sample_trade():
     )
 
 
+@pytest.fixture
+def sample_orderbook():
+    """Fixture to create sample orderbook"""
+    return OrderBook(
+        timestamp=datetime(2023, 12, 18, 10, 0, 0, tzinfo=UTC),
+        exchange="binance",
+        symbol="BTCUSDT",
+        bids=[
+            (Decimal("49999.00"), Decimal("1.5")),
+            (Decimal("49998.00"), Decimal("2.0")),
+        ],
+        asks=[
+            (Decimal("50001.00"), Decimal("1.2")),
+            (Decimal("50002.00"), Decimal("1.8")),
+        ],
+    )
+
+
 class TestStreamProcessorInitialization:
     """Test StreamProcessor initialization"""
 
-    def test_initialization_with_default_buffer(self, mock_clients):
-        """Test processor initialization with default buffer size"""
-        processor = StreamProcessor()
+    def test_initialization_redis_only(self, mock_cache_client):
+        """Test processor initialization with cache client only"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
 
-        assert processor.buffer_size == 100
-        assert processor.trade_buffer == []
-
-    def test_initialization_with_custom_buffer(self, mock_clients):
-        """Test processor initialization with custom buffer size"""
-        processor = StreamProcessor(buffer_size=50)
-
-        assert processor.buffer_size == 50
+        assert processor.cache_client == mock_cache_client
+        # Verify NO other clients exist
+        assert not hasattr(processor, "stream_client")
+        assert not hasattr(processor, "storage_client")
+        assert not hasattr(processor, "db_client")
+        assert not hasattr(processor, "trade_buffer")
 
 
 class TestStreamProcessorConnect:
-    """Test connection to downstream services"""
+    """Test connection to Redis"""
 
     @pytest.mark.asyncio
-    async def test_connect_calls_all_clients(self, mock_clients):
-        """Test that connect() calls connect on all clients"""
-        processor = StreamProcessor()
+    async def test_connect_calls_cache_client(self, mock_cache_client):
+        """Test that connect() calls cache client connect"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
 
         await processor.connect()
 
-        mock_clients["stream"].connect.assert_called_once()
-        mock_clients["storage"].connect.assert_called_once()
-        mock_clients["timeseries"].connect.assert_called_once()
-        mock_clients["cache"].connect.assert_called_once()
+        mock_cache_client.connect.assert_called_once()
 
 
 class TestStreamProcessorProcessTrade:
-    """Test trade processing logic"""
+    """Test trade processing logic (Redis only)"""
 
     @pytest.mark.asyncio
-    async def test_process_trade_sends_to_stream(self, mock_clients, sample_trade):
-        """Test that process_trade sends to stream (Kafka/Kinesis)"""
-        processor = StreamProcessor()
+    async def test_process_trade_updates_cache(self, mock_cache_client, sample_trade):
+        """Test that process_trade ONLY updates Redis cache"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
         await processor.connect()
 
         await processor.process_trade(sample_trade)
 
-        mock_clients["stream"].send_record.assert_called_once()
-        call_args = mock_clients["stream"].send_record.call_args
-        assert call_args[1]["stream_name"] == "test-stream"
-        assert call_args[1]["partition_key"] == "BTCUSDT"
+        # Verify Redis cache was updated
+        mock_cache_client.set.assert_called_once()
+        call_args = mock_cache_client.set.call_args
+
+        # Check key format: latest_price:{exchange}:{symbol}
+        assert call_args[0][0] == "latest_price:binance:BTCUSDT"
+
+        # Check value is price as string
+        assert call_args[0][1] == "50000.00"
+
+        # Check TTL
+        assert call_args[1]["ttl"] == 60
 
     @pytest.mark.asyncio
-    async def test_process_trade_buffers_for_timeseries_db(self, mock_clients, sample_trade):
-        """Test that trades are buffered before timeseries DB insert"""
-        processor = StreamProcessor(buffer_size=3)
-        await processor.connect()
+    async def test_process_trade_does_not_write_to_clickhouse(
+        self, mock_cache_client, sample_trade
+    ):
+        """Verify StreamProcessor does NOT have ClickHouse client"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
 
-        # Process 2 trades (< buffer_size)
-        await processor.process_trade(sample_trade)
-        await processor.process_trade(sample_trade)
-
-        # Should NOT flush yet
-        mock_clients["timeseries"].insert_trades.assert_not_called()
-        assert len(processor.trade_buffer) == 2
+        # Should not have db_client attribute
+        assert not hasattr(processor, "db_client")
+        assert not hasattr(processor, "timeseries_db")
 
     @pytest.mark.asyncio
-    async def test_process_trade_flushes_when_buffer_full(self, mock_clients, sample_trade):
-        """Test that buffer flushes when full"""
-        processor = StreamProcessor(buffer_size=3)
-        await processor.connect()
-        mock_clients["timeseries"].insert_trades.return_value = 3
+    async def test_process_trade_does_not_send_to_stream(
+        self, mock_cache_client, sample_trade
+    ):
+        """Verify StreamProcessor does NOT have stream client"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
 
-        # Process 3 trades (= buffer_size)
-        await processor.process_trade(sample_trade)
-        await processor.process_trade(sample_trade)
-        await processor.process_trade(sample_trade)
-
-        # Should flush
-        mock_clients["timeseries"].insert_trades.assert_called_once()
-        assert len(processor.trade_buffer) == 0  # Buffer cleared
+        # Should not have stream_client attribute
+        assert not hasattr(processor, "stream_client")
 
     @pytest.mark.asyncio
-    async def test_process_trade_updates_cache(self, mock_clients, sample_trade):
-        """Test that process_trade updates cache (Redis/Memcached)"""
-        processor = StreamProcessor()
-        await processor.connect()
+    async def test_process_trade_does_not_batch(self, mock_cache_client, sample_trade):
+        """Verify StreamProcessor does NOT have batch buffers"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
 
-        await processor.process_trade(sample_trade)
-
-        mock_clients["cache"].set.assert_called_once()
-        call_args = mock_clients["cache"].set.call_args
-        assert "latest_price:binance:BTCUSDT" in call_args[0][0]
+        # Should not have buffer attributes
+        assert not hasattr(processor, "trade_buffer")
+        assert not hasattr(processor, "orderbook_buffer")
 
 
-class TestStreamProcessorErrorHandling:
-    """Test error handling in stream processor"""
+class TestStreamProcessorProcessOrderbook:
+    """Test orderbook processing logic (Redis only)"""
 
     @pytest.mark.asyncio
-    async def test_stream_error_does_not_stop_processing(self, mock_clients, sample_trade):
-        """Test that stream error doesn't prevent storage/timeseries/cache updates"""
-        processor = StreamProcessor(buffer_size=1)
+    async def test_process_orderbook_updates_cache(
+        self, mock_cache_client, sample_orderbook
+    ):
+        """Test that process_orderbook updates Redis cache"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
         await processor.connect()
 
-        # Make stream fail
-        mock_clients["stream"].send_record.side_effect = Exception("Stream error")
-        mock_clients["timeseries"].insert_trades.return_value = 1
+        await processor.process_orderbook(sample_orderbook)
 
-        # Should not raise exception
-        await processor.process_trade(sample_trade)
+        # Verify Redis cache was updated
+        mock_cache_client.set.assert_called_once()
+        call_args = mock_cache_client.set.call_args
 
-        # Storage, timeseries and cache should still be called
-        mock_clients["storage"].upload_file.assert_called_once()
-        mock_clients["timeseries"].insert_trades.assert_called_once()
-        mock_clients["cache"].set.assert_called_once()
+        # Check key format: orderbook:{exchange}:{symbol}
+        assert call_args[0][0] == "orderbook:binance:BTCUSDT"
 
-    @pytest.mark.asyncio
-    async def test_cache_error_does_not_stop_processing(self, mock_clients, sample_trade):
-        """Test that cache error doesn't prevent stream/storage/timeseries updates"""
-        processor = StreamProcessor(buffer_size=1)
-        await processor.connect()
+        # Check data structure
+        data = call_args[0][1]
+        assert "best_bid_price" in data
+        assert "best_ask_price" in data
+        assert "spread" in data
+        assert "mid_price" in data
 
-        # Make cache fail
-        mock_clients["cache"].set.side_effect = Exception("Cache error")
-        mock_clients["timeseries"].insert_trades.return_value = 1
-
-        # Should not raise exception
-        await processor.process_trade(sample_trade)
-
-        # Stream, storage and timeseries should still be called
-        mock_clients["stream"].send_record.assert_called_once()
-        mock_clients["storage"].upload_file.assert_called_once()
-        mock_clients["timeseries"].insert_trades.assert_called_once()
+        # Check TTL
+        assert call_args[1]["ttl"] == 60
 
 
 class TestStreamProcessorClose:
     """Test cleanup and resource closing"""
 
     @pytest.mark.asyncio
-    async def test_close_flushes_remaining_trades(self, mock_clients, sample_trade):
-        """Test that close() flushes remaining trades in buffer"""
-        processor = StreamProcessor(buffer_size=100)
-        await processor.connect()
-        mock_clients["timeseries"].insert_trades.return_value = 2
-
-        # Add 2 trades to buffer (< buffer_size)
-        await processor.process_trade(sample_trade)
-        await processor.process_trade(sample_trade)
-
-        # Close should flush remaining trades
-        await processor.close()
-
-        mock_clients["timeseries"].insert_trades.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_close_calls_all_client_closes(self, mock_clients):
-        """Test that close() calls close on all clients"""
-        processor = StreamProcessor()
+    async def test_close_calls_cache_close(self, mock_cache_client):
+        """Test that close() calls cache client close"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
         await processor.connect()
 
         await processor.close()
 
-        mock_clients["stream"].close.assert_called_once()
-        mock_clients["storage"].close.assert_called_once()
-        mock_clients["timeseries"].close.assert_called_once()
-        mock_clients["cache"].close.assert_called_once()
+        mock_cache_client.close.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_close_with_empty_buffer(self, mock_clients):
-        """Test close when buffer is empty"""
-        processor = StreamProcessor()
-        await processor.connect()
+    async def test_close_does_not_flush_buffers(self, mock_cache_client):
+        """Verify close() does NOT flush buffers (no batching in Phase 2)"""
+        processor = StreamProcessor(cache_client=mock_cache_client)
 
-        # Should not crash with empty buffer
-        await processor.close()
-
-        # Should still close all clients
-        mock_clients["stream"].close.assert_called_once()
-
-
-class TestStreamProcessorBatchProcessing:
-    """Test batch processing behavior"""
-
-    @pytest.mark.asyncio
-    async def test_buffer_accumulation(self, mock_clients, sample_trade):
-        """Test that buffer accumulates correctly"""
-        processor = StreamProcessor(buffer_size=5)
-        await processor.connect()
-
-        # Process 4 trades
-        for _ in range(4):
-            await processor.process_trade(sample_trade)
-
-        assert len(processor.trade_buffer) == 4
-        mock_clients["timeseries"].insert_trades.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_multiple_flushes(self, mock_clients, sample_trade):
-        """Test multiple buffer flushes"""
-        processor = StreamProcessor(buffer_size=2)
-        await processor.connect()
-        mock_clients["timeseries"].insert_trades.return_value = 2
-
-        # Process 5 trades (should flush twice)
-        for _ in range(5):
-            await processor.process_trade(sample_trade)
-
-        # 2 flushes (4 trades) + 1 remaining in buffer
-        assert mock_clients["timeseries"].insert_trades.call_count == 2
-        assert len(processor.trade_buffer) == 1
+        # Should not have flush methods
+        assert not hasattr(processor, "_flush_trades")
+        assert not hasattr(processor, "_flush_orderbooks")
 
 
 if __name__ == "__main__":
