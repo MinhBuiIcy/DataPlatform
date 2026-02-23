@@ -52,9 +52,7 @@ class KinesisStreamProducer(BaseStreamProducer):
             logger.error(f"✗ Failed to connect to Kinesis: {e}")
             raise
 
-    async def _send_impl(
-        self, stream_name: str, data: dict[str, Any], partition_key: str
-    ) -> None:
+    async def _send_impl(self, stream_name: str, data: dict[str, Any], partition_key: str) -> None:
         """Required by BaseStreamProducer - delegates to send_record"""
         await self.send_record(stream_name, data, partition_key)
 
