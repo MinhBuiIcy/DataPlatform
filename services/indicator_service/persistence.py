@@ -18,7 +18,7 @@ Architecture:
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from core.interfaces.cache import BaseCacheClient
 from core.interfaces.database import BaseTimeSeriesDB
@@ -54,8 +54,8 @@ class IndicatorPersistence:
         # Step 1: Cache-first (blocking - critical path)
         await self._write_cache(exchange, symbol, timeframe, timestamp, indicators)
 
-        # Step 2: Database (background task - non-blocking)
-        asyncio.create_task(self._write_db(exchange, symbol, timeframe, timestamp, indicators))
+        # Step 2: Database (sequential - avoids connection conflicts)
+        await self._write_db(exchange, symbol, timeframe, timestamp, indicators)
 
     async def _write_cache(
         self,
@@ -79,7 +79,7 @@ class IndicatorPersistence:
                 "indicators": indicators,
             }
 
-            await self.cache.setex(key, 60, json.dumps(value))
+            await self.cache.set(key, json.dumps(value), ttl_seconds=60)
             logger.debug(f"✓ Cached {len(indicators)} indicators for {symbol}")
 
         except Exception as e:

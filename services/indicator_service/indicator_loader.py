@@ -47,7 +47,9 @@ class IndicatorLoader:
 
             try:
                 # Use domain registry to create indicator
-                indicator = IndicatorRegistry.create(indicator_type, **params)
+                # Pass configured name in params so indicator.get_results() returns correct key
+                params_with_name = {**params, "name": name}
+                indicator = IndicatorRegistry.create(indicator_type, **params_with_name)
                 indicators[name] = indicator
                 logger.debug(f"  ✓ Loaded {name}: {indicator}")
 
