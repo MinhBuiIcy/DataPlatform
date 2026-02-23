@@ -1,13 +1,21 @@
 """
-Abstract base class for exchange WebSocket clients
+Abstract base classes for exchange clients
 
-Cloud-agnostic interface for connecting to cryptocurrency exchanges
+Cloud-agnostic interfaces for:
+- WebSocket real-time data (BaseExchangeWebSocket)
+- REST API historical/authoritative data (BaseExchangeRestAPI)
 """
 
+import asyncio
+import logging
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
+from datetime import datetime
 
-from core.models.market_data import OrderBook, Trade
+from core.models.market_data import Candle, OrderBook, Trade
+
+logger = logging.getLogger(__name__)
 
 
 class BaseExchangeWebSocket(ABC):
@@ -15,6 +23,10 @@ class BaseExchangeWebSocket(ABC):
     Abstract base class for exchange WebSocket clients
 
     Cloud-agnostic interface - supports any exchange (Binance, Coinbase, Kraken, etc.)
+
+    Uses an internal asyncio.Queue to decouple WebSocket message reading from
+    callback processing. This prevents slow callbacks from blocking the WebSocket
+    reader and causing ping/pong timeouts.
 
     Implementations:
     - BinanceWebSocketClient (providers/binance/websocket.py)
@@ -35,6 +47,7 @@ class BaseExchangeWebSocket(ABC):
         >>>
         >>> # Connect and start
         >>> await client.connect()
+        >>> client.start_consumer()
         >>> await client.start()
     """
 
@@ -49,6 +62,35 @@ class BaseExchangeWebSocket(ABC):
         self.callbacks_trade: list[Callable[[Trade], Awaitable[None]]] = []
         self.callbacks_orderbook: list[Callable[[OrderBook], Awaitable[None]]] = []
         self.running = False
+
+        # Load config from settings (lazy to avoid import at module level)
+        self._queue: asyncio.Queue | None = None
+        self._consumer_tasks: list[asyncio.Task] = []
+        self._last_orderbook_time: dict[str, float] = {}  # symbol_key → monotonic time
+        self._ws_config_cache: dict | None = None
+
+    def _get_ws_config(self) -> dict:
+        """Load WebSocket config from settings (cached after first call)."""
+        if self._ws_config_cache is not None:
+            return self._ws_config_cache
+        from config.settings import get_settings
+        settings = get_settings()
+        self._ws_config_cache = {
+            "queue_max_size": settings.WS_QUEUE_MAX_SIZE,
+            "consumer_workers": settings.WS_CONSUMER_WORKERS,
+            "ping_interval": settings.WS_PING_INTERVAL,
+            "ping_timeout": settings.WS_PING_TIMEOUT,
+            "max_message_size": settings.WS_MAX_MESSAGE_SIZE,
+            "orderbook_sample_interval_s": settings.WS_ORDERBOOK_SAMPLE_INTERVAL_MS / 1000.0,
+        }
+        return self._ws_config_cache
+
+    def _ensure_queue(self) -> asyncio.Queue:
+        """Lazily create the queue (needs event loop context)."""
+        if self._queue is None:
+            config = self._get_ws_config()
+            self._queue = asyncio.Queue(maxsize=config["queue_max_size"])
+        return self._queue
 
     @abstractmethod
     async def connect(self) -> None:
@@ -99,17 +141,6 @@ class BaseExchangeWebSocket(ABC):
 
         Returns:
             Normalized Trade object
-
-        Example:
-            >>> # Binance format
-            >>> data = {
-            ...     "e": "trade",
-            ...     "s": "BTCUSDT",
-            ...     "p": "50000.00",
-            ...     "q": "0.1",
-            ...     "T": 1640000000000
-            ... }
-            >>> trade = self._parse_trade(data)
         """
 
     @abstractmethod
@@ -122,78 +153,220 @@ class BaseExchangeWebSocket(ABC):
 
         Returns:
             Normalized OrderBook object
-
-        Example:
-            >>> # Binance depth format
-            >>> data = {
-            ...     "bids": [["50000", "0.1"], ["49999", "0.2"]],
-            ...     "asks": [["50001", "0.15"], ["50002", "0.25"]]
-            ... }
-            >>> orderbook = self._parse_orderbook(data)
         """
 
     def on_trade(self, callback: Callable[[Trade], Awaitable[None]]) -> None:
-        """
-        Register trade callback
-
-        The callback will be called for every trade received.
-
-        Args:
-            callback: Async function that takes a Trade object
-
-        Example:
-            >>> async def handle_trade(trade: Trade):
-            ...     print(f"New trade: {trade.symbol} @ {trade.price}")
-            >>>
-            >>> client.on_trade(handle_trade)
-        """
+        """Register trade callback."""
         self.callbacks_trade.append(callback)
 
     def on_orderbook(self, callback: Callable[[OrderBook], Awaitable[None]]) -> None:
-        """
-        Register order book callback
-
-        The callback will be called for every order book update received.
-
-        Args:
-            callback: Async function that takes an OrderBook object
-
-        Example:
-            >>> async def handle_orderbook(ob: OrderBook):
-            ...     print(f"Order book: {ob.symbol} spread={ob.spread}")
-            >>>
-            >>> client.on_orderbook(handle_orderbook)
-        """
+        """Register order book callback."""
         self.callbacks_orderbook.append(callback)
+
+    def start_consumer(self) -> None:
+        """Start background queue consumer workers.
+
+        Must be called after callbacks are registered and before start().
+        Number of workers is configured via exchanges.yaml websocket.consumer_workers.
+        """
+        config = self._get_ws_config()
+        num_workers = config["consumer_workers"]
+        self._ensure_queue()
+        for i in range(num_workers):
+            task = asyncio.create_task(self._consume_queue(), name=f"ws-consumer-{i}")
+            self._consumer_tasks.append(task)
+        logger.info(f"Started {num_workers} queue consumer workers")
+
+    async def stop_consumer(self) -> None:
+        """Stop all background queue consumer workers."""
+        for task in self._consumer_tasks:
+            if not task.done():
+                task.cancel()
+        for task in self._consumer_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._consumer_tasks.clear()
 
     async def _notify_trade(self, trade: Trade) -> None:
         """
-        Notify all trade callbacks
+        Enqueue a trade for async processing.
 
-        Called internally when a trade is received and parsed.
-
-        Args:
-            trade: Parsed Trade object
+        Non-blocking: drops the message if queue is full to keep
+        the WebSocket reader fast.
         """
-        for callback in self.callbacks_trade:
-            try:
-                await callback(trade)
-            except Exception as e:
-                # Don't let callback errors crash the WebSocket
-                print(f"Error in trade callback: {e}")
+        queue = self._ensure_queue()
+        try:
+            queue.put_nowait(("trade", trade))
+        except asyncio.QueueFull:
+            logger.warning(
+                f"Queue full, dropping trade: {trade.exchange}:{trade.symbol}"
+            )
 
     async def _notify_orderbook(self, orderbook: OrderBook) -> None:
         """
-        Notify all order book callbacks
+        Enqueue an orderbook for async processing.
 
-        Called internally when an order book update is received and parsed.
+        Pre-filters by sampling: keeps at most 1 orderbook per symbol per
+        configured interval. This reduces queue pressure from ~200 msg/s
+        to ~20 msg/s (1/s × 20 symbols).
+        """
+        # Pre-filter: sample 1 per symbol per interval
+        symbol_key = f"{orderbook.exchange}:{orderbook.symbol}"
+        now = time.monotonic()
+        last = self._last_orderbook_time.get(symbol_key, 0.0)
+        interval = self._get_ws_config()["orderbook_sample_interval_s"]
+
+        if now - last < interval:
+            return  # Skip, too soon since last sample
+
+        self._last_orderbook_time[symbol_key] = now
+
+        queue = self._ensure_queue()
+        try:
+            queue.put_nowait(("orderbook", orderbook))
+        except asyncio.QueueFull:
+            logger.warning(
+                f"Queue full, dropping orderbook: {orderbook.exchange}:{orderbook.symbol}"
+            )
+
+    async def _consume_queue(self) -> None:
+        """Background consumer that processes queued messages via callbacks."""
+        queue = self._ensure_queue()
+        while True:
+            try:
+                msg_type, data = await queue.get()
+
+                if msg_type == "trade":
+                    for callback in self.callbacks_trade:
+                        try:
+                            await callback(data)
+                        except Exception as e:
+                            logger.error(f"Error in trade callback: {e}")
+                elif msg_type == "orderbook":
+                    for callback in self.callbacks_orderbook:
+                        try:
+                            await callback(data)
+                        except Exception as e:
+                            logger.error(f"Error in orderbook callback: {e}")
+
+                queue.task_done()
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in queue consumer: {e}")
+
+
+class BaseExchangeRestAPI(ABC):
+    """
+    Abstract base class for exchange REST API clients.
+
+    Industry standard pattern: Use REST API for authoritative OHLCV/klines data,
+    not WebSocket trades (which only capture ~4% of volume).
+
+    Each exchange implements this interface to provide:
+    - OHLCV/klines data fetching
+    - Supported timeframes
+    - Rate limit handling
+
+    Pattern mirrors BaseExchangeWebSocket for consistency.
+
+    Implementations:
+    - BinanceRestAPI (providers/binance/rest_api.py)
+    - CoinbaseRestAPI (providers/coinbase/rest_api.py)
+    - KrakenRestAPI (providers/kraken/rest_api.py)
+
+    Example:
+        >>> from factory.client_factory import create_exchange_rest_api
+        >>>
+        >>> # Create client via factory
+        >>> api = create_exchange_rest_api("binance")
+        >>>
+        >>> # Fetch latest candles
+        >>> candles = await api.fetch_latest_klines("BTCUSDT", "1m", limit=100)
+        >>>
+        >>> # Fetch historical range
+        >>> from datetime import datetime, timezone, timedelta
+        >>> end = datetime.now(timezone.utc)
+        >>> start = end - timedelta(hours=1)
+        >>> candles = await api.fetch_klines("BTCUSDT", "1m", start, end)
+        >>>
+        >>> await api.close()
+    """
+
+    def __init__(self, exchange_name: str):
+        """
+        Initialize REST API client
 
         Args:
-            orderbook: Parsed OrderBook object
+            exchange_name: Exchange identifier (e.g., "binance", "coinbase")
         """
-        for callback in self.callbacks_orderbook:
-            try:
-                await callback(orderbook)
-            except Exception as e:
-                # Don't let callback errors crash the WebSocket
-                print(f"Error in orderbook callback: {e}")
+        self.exchange_name = exchange_name
+
+    @abstractmethod
+    async def fetch_klines(
+        self,
+        symbol: str,
+        timeframe: str,
+        start: datetime,
+        end: datetime,
+        limit: int = 500,
+    ) -> list[Candle]:
+        """
+        Fetch OHLCV klines from exchange REST API.
+
+        Args:
+            symbol: Trading pair (e.g., "BTCUSDT", "BTC-USD")
+            timeframe: Interval (e.g., "1m", "5m", "1h")
+            start: Start time (inclusive, timezone-aware)
+            end: End time (inclusive, timezone-aware)
+            limit: Max candles to fetch per request (default 500)
+
+        Returns:
+            List of Candle objects, sorted by timestamp ascending
+
+        Raises:
+            ExchangeAPIError: If API request fails
+            RateLimitError: If rate limit exceeded
+        """
+        pass
+
+    @abstractmethod
+    async def fetch_latest_klines(
+        self, symbol: str, timeframe: str, limit: int = 100
+    ) -> list[Candle]:
+        """
+        Fetch latest N klines (most recent data).
+
+        Used by Sync Service to fetch latest candles without
+        needing to specify time range.
+
+        Args:
+            symbol: Trading pair (e.g., "BTCUSDT")
+            timeframe: Interval (e.g., "1m", "5m", "1h")
+            limit: Number of latest candles to fetch (default 100)
+
+        Returns:
+            List of Candle objects, sorted by timestamp ascending
+
+        Raises:
+            ExchangeAPIError: If API request fails
+        """
+        pass
+
+    @abstractmethod
+    def get_supported_timeframes(self) -> list[str]:
+        """
+        Get supported timeframes for this exchange.
+
+        Returns:
+            List of timeframe strings (e.g., ["1m", "5m", "1h", "1d"])
+        """
+        pass
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Close API client connections and cleanup resources"""
+        pass

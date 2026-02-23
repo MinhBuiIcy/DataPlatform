@@ -23,16 +23,17 @@ class BaseIndicator(ABC):
     - RSI, MACD, Stochastic (domain/indicators/momentum.py)
     """
 
-    def __init__(self, period: int, **kwargs):
+    def __init__(self, period: int, name: str = None, **kwargs):
         """
         Initialize indicator
 
         Args:
             period: Look-back period for calculation
+            name: Custom name for this indicator (e.g., "SMA_20"). If None, uses class name.
             **kwargs: Additional indicator-specific parameters
         """
         self.period = period
-        self.name = self.__class__.__name__
+        self.name = name if name else self.__class__.__name__
         self.params = {"period": period, **kwargs}
 
     @abstractmethod
