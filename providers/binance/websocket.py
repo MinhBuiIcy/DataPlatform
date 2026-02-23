@@ -57,12 +57,17 @@ class BinanceWebSocketClient(BaseExchangeWebSocket):
         - Order book depth: {symbol}@depth@100ms (top 10 levels, 100ms updates)
         """
         # Build combined stream URL
-        # Format: wss://stream.binance.com:9443/ws/btcusdt@trade/btcusdt@depth@100ms/ethusdt@trade/...
+        # Format: wss://stream.binance.com:9443/ws/btcusdt@trade/btcusdt@depth@1000ms/...
+        from config.loader import get_enabled_exchanges
+        exchange_configs = get_enabled_exchanges()
+        binance_cfg = exchange_configs.get("binance")
+        update_ms = binance_cfg.features.orderbook_update_ms if binance_cfg else 1000
+
         streams = []
         for symbol in self.symbols:
             symbol_lower = symbol.lower()
             streams.append(f"{symbol_lower}@trade")
-            streams.append(f"{symbol_lower}@depth@100ms")
+            streams.append(f"{symbol_lower}@depth@{update_ms}ms")
 
         url = f"{self.BASE_URL}/{'/'.join(streams)}"
         logger.info(f"Connecting to Binance WebSocket with {len(self.symbols)} symbols...")
@@ -79,7 +84,13 @@ class BinanceWebSocketClient(BaseExchangeWebSocket):
 
         while self.running:
             try:
-                async with connect(self.url) as websocket:
+                ws_config = self._get_ws_config()
+                async with connect(
+                    self.url,
+                    ping_interval=ws_config["ping_interval"],
+                    ping_timeout=ws_config["ping_timeout"],
+                    max_size=ws_config["max_message_size"],
+                ) as websocket:
                     self.websocket = websocket
                     logger.info(f"✓ Connected to Binance WebSocket: {len(self.symbols)} symbols")
 

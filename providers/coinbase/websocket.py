@@ -11,7 +11,7 @@ Handles:
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from websockets import connect
@@ -70,7 +70,13 @@ class CoinbaseWebSocketClient(BaseExchangeWebSocket):
 
         while self.running:
             try:
-                async with connect(self.url) as websocket:
+                ws_config = self._get_ws_config()
+                async with connect(
+                    self.url,
+                    ping_interval=ws_config["ping_interval"],
+                    ping_timeout=ws_config["ping_timeout"],
+                    max_size=ws_config["max_message_size"],
+                ) as websocket:
                     self.websocket = websocket
 
                     # Send subscription message
@@ -202,7 +208,7 @@ class CoinbaseWebSocketClient(BaseExchangeWebSocket):
         """
         if data["type"] == "snapshot":
             # Full snapshot
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(UTC)
             bids = [(Decimal(p), Decimal(s)) for p, s in data["bids"][:10]]
             asks = [(Decimal(p), Decimal(s)) for p, s in data["asks"][:10]]
 

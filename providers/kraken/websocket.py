@@ -70,7 +70,13 @@ class KrakenWebSocketClient(BaseExchangeWebSocket):
 
         while self.running:
             try:
-                async with connect(self.url) as websocket:
+                ws_config = self._get_ws_config()
+                async with connect(
+                    self.url,
+                    ping_interval=ws_config["ping_interval"],
+                    ping_timeout=ws_config["ping_timeout"],
+                    max_size=ws_config["max_message_size"],
+                ) as websocket:
                     self.websocket = websocket
 
                     # Subscribe to trade channel
@@ -130,8 +136,14 @@ class KrakenWebSocketClient(BaseExchangeWebSocket):
 
         # Array messages are data updates
         if isinstance(data, list) and len(data) >= 4:
-            channel_name = data[2]
-            pair = data[3]
+            # Book updates with checksum are 5-element arrays where data[2] is a dict:
+            # [channelID, data, {"c": "checksum"}, "book-10", "XBT/USD"]
+            if isinstance(data[2], dict) and len(data) >= 5:
+                channel_name = data[3]
+                pair = data[4]
+            else:
+                channel_name = data[2]
+                pair = data[3]
 
             if channel_name == "trade":
                 # Trade data
@@ -217,7 +229,7 @@ class KrakenWebSocketClient(BaseExchangeWebSocket):
         bids = data.get(bids_key, [])
 
         return OrderBook(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(UTC),
             exchange="kraken",
             symbol=pair,
             bids=[(Decimal(p), Decimal(v)) for p, v, *_ in bids[:10]],  # Top 10

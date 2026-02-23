@@ -2,8 +2,11 @@
 Kafka implementation of stream client
 
 Works with Kafka (KRaft mode) - no ZooKeeper needed
+
+NEW (Phase 2 WebSocket Stability): Uses queued interface pattern from BaseStreamProducer
 """
 
+import asyncio
 import json
 import logging
 from typing import Any
@@ -18,30 +21,42 @@ logger = logging.getLogger(__name__)
 
 class KafkaStreamProducer(BaseStreamProducer):
     """
-    Kafka stream implementation
+    Kafka stream implementation with internal queue + worker pool
+
+    Architecture:
+        StreamProcessor → enqueue_record() → Queue → Workers → Kafka
+                              ↓ (fast)
+                          Non-blocking
 
     Features:
-    - Real-time data streaming
-    - Auto-scaling partitions
-    - Better performance than Kinesis mock
-    - No heap overflow issues
+    - Internal queue (5000 records) + worker pool (10 workers)
+    - enqueue_record() is FAST (sync put_nowait, no await)
+    - Workers handle actual Kafka sends in background
+    - No WebSocket backpressure
     - Production-ready for Phase 6
     """
 
     def __init__(self):
+        super().__init__()  # Initialize queue + workers from BaseStreamProducer
         self.settings = get_settings()
         self.producer = None
 
     async def connect(self) -> None:
-        """Initialize Kafka producer"""
+        """Connect to Kafka + start worker pool"""
+        # Start workers FIRST (BaseStreamProducer.connect())
+        await super().connect()
+
+        # Then connect to Kafka
         try:
             self.producer = AIOKafkaProducer(
                 bootstrap_servers=self.settings.KAFKA_BOOTSTRAP_SERVERS,
                 value_serializer=lambda v: json.dumps(v, default=str).encode("utf-8"),
                 key_serializer=lambda k: k.encode("utf-8") if k else None,
                 compression_type="gzip",  # Compress messages
-                acks="all",  # Wait for all replicas (durability)
+                acks=0,  # Fire-and-forget (no broker ack wait)
                 max_request_size=1048576,  # 1MB max message size
+                linger_ms=10,  # Batch quickly (10ms)
+                max_batch_size=65536,  # Batch up to 64KB before sending
             )
 
             await self.producer.start()
@@ -51,44 +66,21 @@ class KafkaStreamProducer(BaseStreamProducer):
             logger.error(f"✗ Failed to connect to Kafka: {e}")
             raise
 
-    async def send_record(
-        self, stream_name: str, data: dict[str, Any], partition_key: str
-    ) -> dict[str, Any]:
+    async def _send_impl(self, stream_name: str, data: dict[str, Any], partition_key: str) -> None:
         """
-        Send single record to Kafka topic
+        Actual Kafka send (called by worker from BaseStreamProducer)
 
-        Args:
-            stream_name: Topic name (e.g., 'market-trades')
-            data: Data dictionary (will be JSON serialized)
-            partition_key: Partition key (e.g., symbol for same-symbol ordering)
-
-        Returns:
-            Response with topic, partition, and offset
+        This does the real I/O. Called in background by worker pool.
         """
         if not self.producer:
             raise RuntimeError("Kafka producer not connected")
 
         try:
-            # Send to Kafka (topic = stream_name, key = partition_key)
-            metadata = await self.producer.send_and_wait(
-                topic=stream_name, value=data, key=partition_key
-            )
-
-            logger.debug(
-                f"Sent record to {stream_name}: "
-                f"Partition={metadata.partition}, Offset={metadata.offset}"
-            )
-
-            return {
-                "topic": metadata.topic,
-                "partition": metadata.partition,
-                "offset": metadata.offset,
-                "timestamp": metadata.timestamp,
-            }
-
+            # Kafka batches internally via linger_ms/max_batch_size
+            await self.producer.send(topic=stream_name, value=data, key=partition_key)
         except Exception as e:
-            logger.error(f"✗ Kafka send_record error: {e}")
-            raise
+            logger.error(f"✗ Kafka send error: {e}")
+            # Don't raise - worker continues processing other messages
 
     async def send_batch(self, stream_name: str, records: list[dict[str, Any]]) -> dict[str, Any]:
         """
@@ -134,14 +126,14 @@ class KafkaStreamProducer(BaseStreamProducer):
             raise
 
     async def close(self) -> None:
-        """Close producer"""
+        """Stop workers + close Kafka"""
+        # Close Kafka producer first
         if self.producer:
             try:
                 await self.producer.stop()
-                logger.info("✓ Kafka connection closed")
+                logger.info("✓ Kafka producer closed")
             except Exception as e:
                 logger.error(f"Error closing Kafka producer: {e}")
 
-
-# Import asyncio for batch operations
-import asyncio
+        # Stop workers + flush queue (BaseStreamProducer.close())
+        await super().close()

@@ -2,8 +2,12 @@
 ClickHouse implementation of time-series database
 
 Provides high-performance columnar storage for market data
+
+Note: clickhouse_driver.Client is synchronous. All execute() calls are
+wrapped in asyncio.to_thread() to avoid blocking the event loop.
 """
 
+import asyncio
 import logging
 from typing import Any
 
@@ -17,54 +21,114 @@ logger = logging.getLogger(__name__)
 
 class ClickHouseClient(BaseTimeSeriesDB):
     """
-    ClickHouse implementation
+    ClickHouse implementation with connection pooling + worker pool
+
+    Architecture:
+        StreamProcessor → enqueue_trades() → Queue → Workers → Pool → ClickHouse
+                              ↓ (put_nowait, fast)       ↓ (get connection)
+                          Non-blocking              Connection pool
 
     Features:
+    - Internal queue (2000 items) + worker pool (3 workers)
+    - Connection pool (configurable, default: same as workers)
+    - Auto-batching (100 trades per insert)
     - Columnar storage (high compression)
     - Fast aggregation queries
     - Partitioning by time
     - TTL for automatic data cleanup
+
+    Connection Pooling:
+    - Each worker gets a connection from pool (blocks if all busy)
+    - Poisoned connections are replaced automatically
+    - Pool size configurable via databases.yaml (clickhouse.pool_size)
     """
 
     def __init__(self):
+        super().__init__()  # Initialize queue + workers from BaseTimeSeriesDB
         self.settings = get_settings()
-        self.client: Client | None = None
+        self._pool: asyncio.Queue[Client] | None = None
 
     async def connect(self) -> None:
-        """Establish connection to ClickHouse"""
-        try:
-            self.client = Client(
-                host=self.settings.CLICKHOUSE_HOST,
-                port=self.settings.CLICKHOUSE_PORT,
-                database=self.settings.CLICKHOUSE_DB,
-                user=self.settings.CLICKHOUSE_USER,
-                password=self.settings.CLICKHOUSE_PASSWORD,
-            )
-            # Test connection
-            self.client.execute("SELECT 1")
-            logger.info(
-                f"✓ Connected to ClickHouse: "
-                f"{self.settings.CLICKHOUSE_HOST}:{self.settings.CLICKHOUSE_PORT}"
-            )
-        except Exception as e:
-            logger.error(f"✗ Failed to connect to ClickHouse: {e}")
-            raise
+        """Connect to ClickHouse + start worker pool"""
+        # 1. Start workers FIRST (BaseTimeSeriesDB.connect())
+        await super().connect()
 
-    async def insert_trades(self, trades: list[dict[str, Any]]) -> int:
+        # 2. Create connection pool
+        pool_size = self.settings.CLICKHOUSE_POOL_SIZE
+        self._pool = asyncio.Queue(maxsize=pool_size)
+
+        logger.info(
+            f"Creating ClickHouse connection pool "
+            f"(size={pool_size}, host={self.settings.CLICKHOUSE_HOST}:{self.settings.CLICKHOUSE_PORT})..."
+        )
+
+        for i in range(pool_size):
+            try:
+                conn = await self._create_connection()
+                await self._pool.put(conn)
+                logger.debug(f"  ✓ Connection {i+1}/{pool_size} added to pool")
+            except Exception as e:
+                logger.error(f"Failed to create connection {i+1}: {e}")
+                raise
+
+        logger.info(f"✓ ClickHouse pool ready with {pool_size} connections")
+
+    async def _create_connection(self) -> Client:
         """
-        Batch insert trades into market_trades table
+        Factory method: create a new ClickHouse connection.
 
-        Args:
-            trades: List of trade dictionaries
+        Called during:
+        - Initial pool creation (connect())
+        - Poison connection recovery (all insert/query methods)
 
         Returns:
-            Number of rows inserted
+            Connected ClickHouse Client
+
+        Raises:
+            Exception if connection fails
+        """
+        conn = Client(
+            host=self.settings.CLICKHOUSE_HOST,
+            port=self.settings.CLICKHOUSE_PORT,
+            database=self.settings.CLICKHOUSE_DB,
+            user=self.settings.CLICKHOUSE_USER,
+            password=self.settings.CLICKHOUSE_PASSWORD,
+        )
+
+        # Test connection with simple query
+        await asyncio.to_thread(conn.execute, "SELECT 1")
+
+        return conn
+
+    async def _insert_trades_impl(self, trades: list[dict[str, Any]]) -> int:
+        """
+        ClickHouse batch insert with connection pooling.
+
+        Flow:
+        1. Get connection from pool (blocks if pool empty)
+        2. Execute query
+        3. If success: return connection to pool
+        4. If error (poisoned):
+           - Disconnect broken connection
+           - Try to create new connection
+           - If recreate succeeds: return new connection to pool
+           - If recreate fails: DO NOT return broken conn, log critical error
+
+        Args:
+            trades: Batched trade data (from BaseTimeSeriesDB worker)
+
+        Returns:
+            Number of rows inserted (0 if failed)
         """
         if not trades:
             return 0
 
-        if not self.client:
-            raise RuntimeError("ClickHouse client not connected")
+        if not self._pool:
+            raise RuntimeError("ClickHouse pool not initialized")
+
+        # Get connection from pool (blocks if all connections busy)
+        conn = await self._pool.get()
+        poisoned = False
 
         try:
             # Convert to format expected by ClickHouse
@@ -88,17 +152,49 @@ class ClickHouseClient(BaseTimeSeriesDB):
                 VALUES
             """
 
-            self.client.execute(query, rows)
+            # Execute in thread pool (sync driver)
+            await asyncio.to_thread(conn.execute, query, rows)
+
             logger.debug(f"Inserted {len(rows)} trades into ClickHouse")
             return len(rows)
 
         except Exception as e:
+            # Connection is poisoned
+            poisoned = True
             logger.error(f"✗ ClickHouse insert error: {e}")
-            raise
+            return 0
+
+        finally:
+            if poisoned:
+                # Attempt to recover from poison
+                try:
+                    # Close broken connection
+                    conn.disconnect()
+                except Exception:
+                    pass  # Best effort, ignore errors
+
+                try:
+                    # Try to create a new connection
+                    conn = await self._create_connection()
+                    logger.warning("Replaced poisoned connection with new one")
+
+                except Exception as e:
+                    # Failed to recreate connection
+                    logger.critical(
+                        f"Failed to recreate ClickHouse connection: {e}. "
+                        f"Pool size reduced by 1 (was {self.settings.CLICKHOUSE_POOL_SIZE})"
+                    )
+                    # DO NOT put broken conn back to pool
+                    # Just return - pool size permanently reduced by 1
+                    # Operator must restart service to restore full pool
+                    return 0
+
+            # Return connection to pool (either original or recreated)
+            await self._pool.put(conn)
 
     async def query(self, sql: str, params: dict | None = None) -> list[dict]:
         """
-        Execute raw SQL query
+        Execute raw SQL query with connection pooling
 
         Args:
             sql: SQL query string
@@ -107,15 +203,19 @@ class ClickHouseClient(BaseTimeSeriesDB):
         Returns:
             List of result rows as dictionaries
         """
-        if not self.client:
-            raise RuntimeError("ClickHouse client not connected")
+        if not self._pool:
+            raise RuntimeError("ClickHouse pool not initialized")
+
+        # Get connection from pool
+        conn = await self._pool.get()
+        poisoned = False
 
         try:
             # Only pass params if provided to avoid string formatting issues
             if params:
-                result = self.client.execute(sql, params, with_column_types=True)
+                result = await asyncio.to_thread(conn.execute, sql, params, with_column_types=True)
             else:
-                result = self.client.execute(sql, with_column_types=True)
+                result = await asyncio.to_thread(conn.execute, sql, with_column_types=True)
 
             # Convert to list of dicts
             if result and len(result) == 2:
@@ -125,12 +225,28 @@ class ClickHouseClient(BaseTimeSeriesDB):
             return []
 
         except Exception as e:
+            poisoned = True
             logger.error(f"✗ ClickHouse query error: {e}")
             raise
 
+        finally:
+            if poisoned:
+                try:
+                    conn.disconnect()
+                except:
+                    pass
+                try:
+                    conn = await self._create_connection()
+                    logger.warning("Replaced poisoned connection")
+                except Exception as e:
+                    logger.critical(f"Failed to recreate connection: {e}")
+                    raise  # Query methods should raise on connection failure
+
+            await self._pool.put(conn)
+
     async def insert_orderbooks(self, orderbooks: list[dict[str, Any]]) -> int:
         """
-        Batch insert order book snapshots
+        Batch insert order book snapshots with connection pooling
 
         Args:
             orderbooks: List of order book dicts from OrderBook.to_dict()
@@ -146,8 +262,11 @@ class ClickHouseClient(BaseTimeSeriesDB):
         if not orderbooks:
             return 0
 
-        if not self.client:
-            raise RuntimeError("ClickHouse client not connected")
+        if not self._pool:
+            raise RuntimeError("ClickHouse pool not initialized")
+
+        conn = await self._pool.get()
+        poisoned = False
 
         try:
             # Convert to format expected by ClickHouse
@@ -169,13 +288,106 @@ class ClickHouseClient(BaseTimeSeriesDB):
                 VALUES
             """
 
-            self.client.execute(query, rows)
+            await asyncio.to_thread(conn.execute, query, rows)
             logger.debug(f"Inserted {len(rows)} order book snapshots into ClickHouse")
             return len(rows)
 
         except Exception as e:
+            poisoned = True
             logger.error(f"✗ ClickHouse orderbook insert error: {e}")
             raise
+
+        finally:
+            if poisoned:
+                try:
+                    conn.disconnect()
+                except:
+                    pass
+                try:
+                    conn = await self._create_connection()
+                    logger.warning("Replaced poisoned connection")
+                except Exception as e:
+                    logger.critical(f"Failed to recreate connection: {e}")
+                    raise
+
+            await self._pool.put(conn)
+
+    async def insert_candles(
+        self, candles: list[dict[str, Any]], timeframe: str = "1m"
+    ) -> int:
+        """
+        Batch insert candles with connection pooling (for backfill, bypassing materialized views)
+
+        Args:
+            candles: List of candle dictionaries
+            timeframe: Target timeframe table (1m, 5m, 1h)
+
+        Returns:
+            Number of rows inserted
+        """
+        if not candles:
+            return 0
+
+        if not self._pool:
+            raise RuntimeError("ClickHouse pool not initialized")
+
+        conn = await self._pool.get()
+        poisoned = False
+
+        try:
+            # Map timeframe to table name
+            table_mapping = {"1m": "candles_1m", "5m": "candles_5m", "1h": "candles_1h"}
+            table = table_mapping.get(timeframe)
+            if not table:
+                raise ValueError(f"Unsupported timeframe for insert: {timeframe}")
+
+            rows = [
+                (
+                    candle["timestamp"],
+                    candle["exchange"],
+                    candle["symbol"],
+                    float(candle["open"]),
+                    float(candle["high"]),
+                    float(candle["low"]),
+                    float(candle["close"]),
+                    float(candle["volume"]),
+                    float(candle.get("quote_volume", 0)),
+                    int(candle.get("trades_count", 0)),
+                    int(candle.get("is_synthetic", 0)),
+                )
+                for candle in candles
+            ]
+
+            query = f"""
+                INSERT INTO trading.{table}
+                (timestamp, exchange, symbol, open, high, low, close,
+                 volume, quote_volume, trades_count, is_synthetic)
+                VALUES
+            """
+
+            await asyncio.to_thread(conn.execute, query, rows)
+            logger.debug(f"Inserted {len(rows)} candles into trading.{table}")
+            return len(rows)
+
+        except Exception as e:
+            poisoned = True
+            logger.error(f"✗ ClickHouse insert_candles error: {e}")
+            raise
+
+        finally:
+            if poisoned:
+                try:
+                    conn.disconnect()
+                except:
+                    pass
+                try:
+                    conn = await self._create_connection()
+                    logger.warning("Replaced poisoned connection")
+                except Exception as e:
+                    logger.critical(f"Failed to recreate connection: {e}")
+                    raise
+
+            await self._pool.put(conn)
 
     async def query_candles(
         self,
@@ -187,7 +399,7 @@ class ClickHouseClient(BaseTimeSeriesDB):
         end_time: Any | None = None,
     ) -> list:
         """
-        Query candles from ClickHouse
+        Query candles from ClickHouse with connection pooling
 
         Args:
             exchange: Exchange name
@@ -202,8 +414,11 @@ class ClickHouseClient(BaseTimeSeriesDB):
         """
         from core.models.market_data import Candle
 
-        if not self.client:
-            raise RuntimeError("ClickHouse client not connected")
+        if not self._pool:
+            raise RuntimeError("ClickHouse pool not initialized")
+
+        conn = await self._pool.get()
+        poisoned = False
 
         try:
             # Map timeframe to table name
@@ -219,14 +434,14 @@ class ClickHouseClient(BaseTimeSeriesDB):
                 FROM trading.{table}
                 WHERE exchange = %(exchange)s
                   AND symbol = %(symbol)s
-                  AND timestamp < now()  -- Only closed candles
+                  AND timestamp < toStartOfMinute(now())  -- Only closed candles (exclude current minute)
                 ORDER BY timestamp DESC
                 LIMIT %(limit)s
             """
 
             params = {"exchange": exchange, "symbol": symbol, "limit": limit}
 
-            result = self.client.execute(query, params)
+            result = await asyncio.to_thread(conn.execute, query, params)
 
             # Convert to Candle objects (reverse to get ASC order)
             candles = []
@@ -252,8 +467,24 @@ class ClickHouseClient(BaseTimeSeriesDB):
             return candles
 
         except Exception as e:
+            poisoned = True
             logger.error(f"✗ ClickHouse query_candles error: {e}")
             raise
+
+        finally:
+            if poisoned:
+                try:
+                    conn.disconnect()
+                except:
+                    pass
+                try:
+                    conn = await self._create_connection()
+                    logger.warning("Replaced poisoned connection")
+                except Exception as e:
+                    logger.critical(f"Failed to recreate connection: {e}")
+                    raise
+
+            await self._pool.put(conn)
 
     async def insert_indicators(
         self,
@@ -264,7 +495,7 @@ class ClickHouseClient(BaseTimeSeriesDB):
         indicators: dict[str, float],
     ) -> int:
         """
-        Insert indicator values into indicators table
+        Insert indicator values with connection pooling
 
         Uses ReplacingMergeTree for automatic deduplication
         ORDER BY (exchange, symbol, timeframe, indicator_name, timestamp)
@@ -282,8 +513,11 @@ class ClickHouseClient(BaseTimeSeriesDB):
         if not indicators:
             return 0
 
-        if not self.client:
-            raise RuntimeError("ClickHouse client not connected")
+        if not self._pool:
+            raise RuntimeError("ClickHouse pool not initialized")
+
+        conn = await self._pool.get()
+        poisoned = False
 
         try:
             # Convert to rows format
@@ -298,16 +532,48 @@ class ClickHouseClient(BaseTimeSeriesDB):
                 VALUES
             """
 
-            self.client.execute(query, rows)
+            await asyncio.to_thread(conn.execute, query, rows)
             logger.debug(f"Inserted {len(rows)} indicators for {exchange}/{symbol}/{timeframe}")
             return len(rows)
 
         except Exception as e:
+            poisoned = True
             logger.error(f"✗ ClickHouse insert_indicators error: {e}")
             raise
 
+        finally:
+            if poisoned:
+                try:
+                    conn.disconnect()
+                except:
+                    pass
+                try:
+                    conn = await self._create_connection()
+                    logger.warning("Replaced poisoned connection")
+                except Exception as e:
+                    logger.critical(f"Failed to recreate connection: {e}")
+                    raise
+
+            await self._pool.put(conn)
+
     async def close(self) -> None:
-        """Close connection"""
-        if self.client:
-            self.client.disconnect()
-            logger.info("✓ ClickHouse connection closed")
+        """Stop workers + close all pooled ClickHouse connections"""
+        # 1. Stop workers first (will flush queue) - BaseTimeSeriesDB.close()
+        await super().close()
+
+        # 2. Close all connections in pool
+        if self._pool:
+            logger.info("Closing ClickHouse connection pool...")
+            closed_count = 0
+
+            while not self._pool.empty():
+                try:
+                    conn = await asyncio.wait_for(self._pool.get(), timeout=1.0)
+                    conn.disconnect()
+                    closed_count += 1
+                except asyncio.TimeoutError:
+                    break
+                except Exception as e:
+                    logger.warning(f"Error closing connection: {e}")
+
+            logger.info(f"✓ Closed {closed_count} ClickHouse connections")
