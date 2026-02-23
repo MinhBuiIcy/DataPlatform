@@ -43,6 +43,13 @@ docker exec trading-clickhouse clickhouse-client --query "SELECT * FROM trading.
 - [x] 001: ALTER candles_1m (add quote_volume, is_synthetic)
 - [x] 002: CREATE Kafka Engine for candle events (auto-creates via kafka-init service)
 - [x] 003: UPDATE indicators table (MergeTree → ReplacingMergeTree, remove TTL)
+- [x] 004: CREATE candles_5m, candles_1h tables (multi-timeframe candles)
+- [x] 005: Convert candle tables to ReplacingMergeTree + add TTL 90 days
+- [x] 006: DROP market_trades, Materialized Views, Kafka Engine tables (Phase 2 cleanup)
 
-**Note**: Kafka topics are auto-created by `kafka-init` service in docker-compose.yml.
-See `infrastructure/docker/kafka/create-topics.sh` for topic configuration.
+**Phase 2 Schema State** (after migration 006):
+- ✅ candles_1m, candles_5m, candles_1h (ReplacingMergeTree, TTL 90d)
+- ✅ indicators (ReplacingMergeTree, TTL 90d)
+- ❌ market_trades (removed - WebSocket trades no longer stored)
+- ❌ Materialized Views (removed - REST API provides authoritative candles)
+- ❌ Kafka Engine tables (removed - scheduled jobs replace event-driven pipeline)

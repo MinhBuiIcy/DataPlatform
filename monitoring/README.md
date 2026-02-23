@@ -9,7 +9,7 @@ monitoring/
 ├── grafana/
 │   ├── dashboards/              # Dashboard JSON files
 │   │   ├── dashboards.yml       # Dashboard provisioning config
-│   │   └── market-data.json     # Real-time crypto prices dashboard
+│   │   └── technical-analysis.json  # Technical analysis dashboard (Phase 2)
 │   │
 │   ├── provisioning/            # Grafana provisioning configs
 │   │   └── datasources.yml      # Datasource definitions (ClickHouse, Prometheus, PostgreSQL)
@@ -62,16 +62,15 @@ kubectl create configmap grafana-dashboards \
 
 ## 📊 Available Dashboards
 
-### 1. Market Data - Real-time Crypto Prices
-- **UID**: `market-data-realtime`
-- **URL**: http://localhost:3000/d/market-data-realtime
+### 1. Technical Analysis (Phase 2)
+- **File**: `technical-analysis.json`
+- **URL**: http://localhost:3000
 - **Panels**:
-  - Real-time BTC & ETH price chart
-  - Latest price stats
-  - Trade count metrics
-  - Trading volume bars
-  - Recent trades table
-- **Refresh**: 5 seconds
+  - Price + Indicators (candlestick with SMA/EMA overlays)
+  - RSI (0-100 range with overbought/oversold zones)
+  - MACD (histogram + signal line)
+  - Volume (bar chart)
+- **Refresh**: 60 seconds
 - **Datasource**: ClickHouse
 
 ## 🔧 Adding New Dashboards

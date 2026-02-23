@@ -6,40 +6,34 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Algorithmic Trading Platform - A cloud-native, multi-exchange cryptocurrency market data platform with real-time streaming, analytics, and ML capabilities. Built for local development with LocalStack/Docker and production deployment to AWS/GCP/Azure.
 
-**Current Phase**: Phase 1 Advanced (Multi-exchange real-time data ingestion)
+**Current Phase**: Phase 2 Complete (OHLCV Candles + Technical Indicators via Scheduled Jobs)
 
 ## Development Commands
 
 ### Dependency Management
 This project uses **uv** (not pip):
 ```bash
-# Install dependencies
-uv sync
-
-# Add new dependency
-uv add <package-name>
-
+uv sync                      # Install dependencies
+uv add <package-name>        # Add new dependency
 # Update pyproject.toml, NOT requirements.txt
 ```
 
 ### Testing
 ```bash
-# Run all tests
-pytest tests/ -v
+# Unit tests (fast, no Docker required)
+uv run pytest tests/unit/ -v -m unit
 
-# Run specific test markers
-pytest -m unit              # Fast unit tests only
-pytest -m integration       # Integration tests (requires Docker)
-pytest -m "not slow"        # Skip slow tests
+# Integration tests (requires Docker + Terraform)
+uv run pytest tests/integration/ -v -m integration
 
-# Run single test file
-pytest tests/integration/test_multi_exchange.py -v
+# Skip slow tests
+uv run pytest -m "not slow"
 
-# Run single test function
-pytest tests/integration/test_multi_exchange.py::test_yaml_config_loading -v
+# Single test file
+uv run pytest tests/unit/indicators/test_moving_averages.py -v
 
 # With coverage
-pytest --cov=. --cov-report=html
+uv run pytest --cov=. --cov-report=html
 ```
 
 ### Infrastructure
@@ -66,11 +60,25 @@ make terraform-destroy      # Tear down
 make setup-local            # Docker + Terraform in one command
 ```
 
-### Running Services
+### Running Services (Phase 2)
 
-**Market Data Ingestion** (Multi-exchange WebSocket → Kinesis/S3/ClickHouse/Redis):
+**Critical**: Run in this order to ensure proper data flow:
+
 ```bash
-python services/market_data_ingestion/main.py
+# Terminal 1: Market Data Ingestion (WebSocket → Redis signals)
+uv run python services/market_data_ingestion/main.py
+# Real-time price updates, NOT authoritative candles
+
+# Terminal 2: Sync Service (REST API → ClickHouse candles)
+uv run python services/sync_service/main.py
+# Runs every 60s, fetches latest klines from exchange REST API
+# Initial backfill: 100 candles on startup
+
+# Terminal 3: Indicator Service (ClickHouse → Calculate → Redis/ClickHouse)
+uv run python services/indicator_service/main.py
+# Runs every 60s (+10s delay after sync)
+# Catch-up mode: Processes all historical candles on startup
+# Calculates: SMA 20/50, EMA 12/26, RSI, MACD
 ```
 
 **Access Points**:
@@ -98,13 +106,14 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 - `BaseCacheClient` - Redis, Memcached
 - `BaseTimeSeriesDB` - ClickHouse, TimescaleDB
 - `BaseExchangeWebSocket` - Binance, Coinbase, Kraken
+- `BaseExchangeRestAPI` - Exchange REST APIs (Phase 2)
 
 **Concrete Implementations** (`providers/`):
 - `providers/aws/` - AWS services
 - `providers/opensource/` - ClickHouse, Redis, Kafka
-- `providers/binance/` - Binance WebSocket
-- `providers/coinbase/` - Coinbase WebSocket
-- `providers/kraken/` - Kraken WebSocket
+- `providers/binance/` - Binance WebSocket + REST API
+- `providers/coinbase/` - Coinbase WebSocket + REST API
+- `providers/kraken/` - Kraken WebSocket + REST API
 
 ### 2. Factory Pattern for Dependency Injection
 
@@ -112,20 +121,27 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 
 ```python
 # ✅ CORRECT - Cloud-agnostic
-from factory.client_factory import create_stream_client, create_cache_client
-stream_client = create_stream_client()  # Returns Kinesis or Kafka based on config
+from factory.client_factory import (
+    create_exchange_rest_api,
+    create_timeseries_db,
+    create_cache_client
+)
+api = create_exchange_rest_api("binance")  # Returns BinanceRestAPI
+db = create_timeseries_db()  # Returns ClickHouseClient
+cache = create_cache_client()  # Returns RedisClient
 
 # ❌ WRONG - Direct import creates vendor lock-in
-from providers.aws.kinesis import KinesisStreamClient
-stream_client = KinesisStreamClient()
+from providers.binance.rest_api import BinanceRestAPI
+api = BinanceRestAPI()
 ```
 
 **Available Factories**:
+- `create_exchange_rest_api(name)` - REST API clients (ccxt-based)
+- `create_exchange_websockets()` - WebSocket clients (multi-exchange)
+- `create_timeseries_db()` - Database (ClickHouse with queues)
+- `create_cache_client()` - Cache (Redis with queues)
 - `create_stream_client()` - Streaming (Kinesis/Kafka)
-- `create_cache_client()` - Cache (Redis)
-- `create_timeseries_db()` - Database (ClickHouse)
 - `create_storage_client()` - Object storage (S3)
-- `create_exchange_websockets()` - Exchange clients (multi-exchange)
 
 ### 3. Configuration Management
 
@@ -135,13 +151,21 @@ stream_client = KinesisStreamClient()
    ```python
    from config.settings import get_settings
    settings = get_settings()  # Singleton pattern
+   print(settings.CLICKHOUSE_PASSWORD)  # From .env
    ```
 
-2. **YAML configs** (`config/providers/`) - Exchange/provider settings
+2. **YAML configs** (`config/providers/`) - Service/provider settings
    ```python
    from config.loader import get_enabled_exchanges
    exchanges = get_enabled_exchanges()  # Returns only enabled exchanges
    ```
+
+**YAML Configuration Files**:
+- `exchanges.yaml` - WebSocket + REST API settings per exchange
+- `sync.yaml` - Sync Service timing, REST API config
+- `indicators.yaml` - Indicator definitions + service settings
+- `databases.yaml` - ClickHouse, Redis, PostgreSQL connection params
+- `streaming.yaml` - Kafka/Kinesis topics (reserved for Phase 3+)
 
 **Container Mode**: Settings default to Docker service names:
 ```python
@@ -150,57 +174,161 @@ REDIS_HOST = "redis"
 POSTGRES_HOST = "postgres"
 ```
 
-### 4. Data Flow Architecture
-
-**Phase 1 Multi-Exchange Ingestion**:
-```
-┌─ Binance WebSocket (config/providers/exchanges.yaml)
-├─ Coinbase WebSocket
-└─ Kraken WebSocket
-    ↓
-  BaseExchangeWebSocket (core/interfaces/market_data.py)
-    ↓
-  DataValidator (core/validators/market_data.py)
-    ↓
-  StreamProcessor (services/market_data_ingestion/stream_processor.py)
-    ├─→ Kinesis (ephemeral streaming, 24h retention)
-    ├─→ S3 (raw data backup, partitioned by exchange/symbol/date)
-    ├─→ ClickHouse (long-term OLAP analytics)
-    └─→ Redis (hot cache for latest prices)
+**CRITICAL GOTCHA - Settings Singleton Reset**:
+```python
+# When testing config changes, reset the singleton
+from config.settings import Settings
+if hasattr(Settings, '_yaml_loaded'):
+    delattr(Settings, '_yaml_loaded')
+settings = get_settings()  # Now reloads from YAML
 ```
 
-**Key Design Decisions**:
-- In-memory buffers for batching (Phase 1-5), not Redis (1000x faster)
-- Validation before processing (spike detection, data quality)
-- Kinesis for Phase 1 (LocalStack support), Kafka for Phase 6 (production)
+### 4. Phase 2 Data Flow Architecture
 
-### 5. Database Schema Optimization
+**Industry Standard: Scheduled Jobs (NOT Event-Driven)**
 
-**ClickHouse Tables**:
+```
+Exchange REST API (ccxt library - authoritative source)
+    ↓
+┌───────────────────────────────────────────────────────┐
+│ Sync Service (every 60 seconds)                       │
+│  - Initial backfill: 100 candles on startup           │
+│  - Regular sync: 5 latest candles per timeframe       │
+│  - Sequential processing (avoid ClickHouse conflicts) │
+└────────────────────┬──────────────────────────────────┘
+                     ↓
+    ClickHouse (candles_1m, candles_5m, candles_1h)
+    ReplacingMergeTree - auto-deduplication
+                     ↓
+┌───────────────────────────────────────────────────────┐
+│ Indicator Service (every 60s + 10s delay)             │
+│  - Catch-up mode: Process all historical candles      │
+│  - Query latest 200 candles from ClickHouse           │
+│  - Calculate: SMA, EMA, RSI, MACD, Stochastic         │
+│  - Save to ClickHouse + Redis (60s TTL)               │
+└────────────────────┬──────────────────────────────────┘
+                     ↓
+        Grafana Dashboard (technical-analysis)
+        4 panels: Price+Indicators, RSI, MACD, Volume
 
-`trading.market_trades`:
+
+Separate Pipeline (Real-time signals only):
+┌───────────────────────────────────────────────────────┐
+│ Exchange WebSocket (Binance, Coinbase, Kraken)        │
+│  - 60+ symbols, real-time trade events                │
+│  - Samples ~4% of trades (NOT authoritative)          │
+└────────────────────┬──────────────────────────────────┘
+                     ↓
+                Redis (latest_price:{exchange}:{symbol})
+                Real-time signals for strategies (Phase 3+)
+```
+
+**Why REST API over WebSocket for Candles?**
+- WebSocket captures only ~4% of trades (sampling)
+- Exchange REST API is authoritative, complete OHLCV data
+- Simpler: No gap handling, no deduplication complexity
+- Industry standard: QuantConnect, TradingView, ccxt all use REST for candles
+
+**Why Scheduled Jobs over Event-Driven?**
+- Simpler: 60-second loops, predictable execution
+- Easier debugging: No Kafka consumer complexity
+- No gap handling needed: Sync Service ensures continuity
+- Event-driven reserved for Phase 3+ (trading strategies)
+
+### 5. ClickHouse Connection Patterns (CRITICAL)
+
+**Single Connection Limitation**:
+```python
+# ClickHouse driver is SYNCHRONOUS, used via asyncio.to_thread()
+# ONLY ONE query at a time per connection!
+
+# ❌ WRONG - Causes "Simultaneous queries on single connection" error
+async def process_parallel(symbols):
+    tasks = [db.query_candles(symbol) for symbol in symbols]
+    await asyncio.gather(*tasks)  # Multiple queries on same connection!
+
+# ✅ CORRECT - Sequential processing
+async def process_sequential(symbols):
+    for symbol in symbols:
+        candles = await db.query_candles(symbol)  # One at a time
+        await process_candles(candles)
+```
+
+**Why Sequential?**
+- `clickhouse_driver.Client` doesn't support connection pooling
+- All async operations use `asyncio.to_thread(self.client.execute, ...)`
+- Same connection = must be sequential
+
+**Implemented in**:
+- `services/sync_service/main.py` - Sequential fetch per exchange/symbol
+- `services/indicator_service/main.py` - Sequential queries + saves
+- `providers/opensource/clickhouse.py` - Wraps sync driver in async
+
+### 6. Indicator Calculation Patterns
+
+**Avoid Re-Querying Database**:
+```python
+# ❌ WRONG - Re-queries database for each candle
+async def process_candle(candle):
+    candles = await db.query_candles(...)  # Wasteful!
+    indicators = calculate(candles)
+
+# ✅ CORRECT - Pass pre-fetched historical data
+async def process_candle_with_history(candle, historical_candles):
+    """
+    Args:
+        candle: Current candle to calculate indicators for
+        historical_candles: Pre-fetched list (e.g., last 200 candles)
+    """
+    if len(historical_candles) < 20:
+        return  # Need minimum history
+
+    results = {}
+    for indicator in indicators:
+        value = indicator.get_results(historical_candles)
+        results.update(value)
+
+    await persistence.save_indicators(candle, results)
+```
+
+**Warm-Up Periods** (from `config/providers/indicators.yaml`):
+- SMA: Requires `period` candles (e.g., SMA_50 needs 50)
+- EMA: Needs ~4× period for convergence (EMA_50 → 200 candles)
+- RSI: ~30+ candles for accuracy
+- MACD: ~50+ candles (slow_period + signal_period)
+- Config: `candle_lookback: 200` (safe default for all)
+
+### 7. Database Schema Optimization
+
+**ClickHouse Tables** (Phase 2):
+
+`trading.candles_1m`, `trading.candles_5m`, `trading.candles_1h`:
 ```sql
-ORDER BY (exchange, symbol, timestamp)  # Exchange-first for multi-exchange filtering
-PARTITION BY toYYYYMM(timestamp)         # Monthly partitions
+ENGINE = ReplacingMergeTree()  -- Auto-deduplication on merge
+ORDER BY (exchange, symbol, timestamp)  -- Exchange-first for multi-exchange queries
+PARTITION BY toYYYYMM(timestamp)  -- Monthly partitions
+TTL toDateTime(timestamp) + INTERVAL 90 DAY  -- Auto-cleanup
+```
+
+`trading.indicators`:
+```sql
+ENGINE = ReplacingMergeTree()
+ORDER BY (exchange, symbol, timeframe, timestamp, indicator_name)
+PARTITION BY toYYYYMM(timestamp)
 TTL toDateTime(timestamp) + INTERVAL 90 DAY
 ```
 
-`trading.orderbook_snapshots`:
-```sql
-bids Array(Tuple(Float64, Float64))     # [(price, qty), ...]
-asks Array(Tuple(Float64, Float64))
-ORDER BY (exchange, symbol, timestamp)
-TTL toDateTime(timestamp) + INTERVAL 30 DAY  # Shorter TTL (high-frequency data)
-```
+**What was REMOVED in Phase 2**:
+- `market_trades` table (WebSocket trades no longer stored)
+- All Materialized Views (candles_1m_mv, candles_5m_mv, etc.)
+- Kafka Engine tables (candles_to_kafka)
+- Migration 006 cleaned up WebSocket pipeline
 
-**Computed Fields**: Calculate at query time, not stored:
-```sql
-SELECT
-    bids[1].1 AS best_bid,
-    asks[1].1 AS best_ask,
-    asks[1].1 - bids[1].1 AS spread,
-    (asks[1].1 + bids[1].1) / 2 AS mid_price
-FROM trading.orderbook_snapshots
+**Key Pattern - ReplacingMergeTree**:
+```python
+# Same (exchange, symbol, timestamp) = replacement, not duplicate
+await db.insert_candles([candle1, candle2, ...])
+# If candle1.timestamp already exists → replaced (not duplicated)
 ```
 
 ## Code Organization Rules
@@ -210,38 +338,91 @@ FROM trading.orderbook_snapshots
 **Cloud-agnostic abstractions** → `core/`
 - Interfaces/ABCs: `core/interfaces/`
 - Data models (Pydantic): `core/models/`
-- Validators: `core/validators/`
+- Validators: `core/validators/` (NOT `services/validators/`)
 
 **Cloud provider implementations** → `providers/`
 - AWS: `providers/aws/`
-- Open-source alternatives: `providers/opensource/`
-- Exchange-specific: `providers/{exchange_name}/`
+- Open-source: `providers/opensource/`
+- Exchanges: `providers/{exchange_name}/`
 
 **Business logic** → `domain/`
-- Trading strategies: `domain/strategies/`
-- Technical indicators: `domain/indicators/`
-- Risk management: `domain/risk/`
+- Indicators: `domain/indicators/`
+- Strategies: `domain/strategies/` (Phase 3+)
+- Risk management: `domain/risk/` (Phase 3+)
 
 **Microservices** → `services/`
-- Market data ingestion: `services/market_data_ingestion/`
-- Trading API: `services/trading_api/`
+- Sync Service: `services/sync_service/`
+- Indicator Service: `services/indicator_service/`
+- Market Data Ingestion: `services/market_data_ingestion/`
 
 **Config files** → `config/`
-- Python settings: `config/settings.py`
-- YAML configs: `config/providers/exchanges.yaml`
+- Settings class: `config/settings.py`
+- YAML configs: `config/providers/*.yaml`
+- Loaders: `config/loader.py`
 
 ### When Adding New Exchange
 
-1. Create `providers/{exchange}/websocket.py` inheriting from `BaseExchangeWebSocket`
-2. Add exchange config to `config/providers/exchanges.yaml`
-3. Update `factory/client_factory.py::create_exchange_websockets()` to instantiate it
-4. No changes to services layer needed (factory handles it)
+1. Create `providers/{exchange}/rest_api.py` inheriting from `BaseExchangeRestAPI`
+2. Create `providers/{exchange}/websocket.py` inheriting from `BaseExchangeWebSocket`
+3. Add exchange config to `config/providers/exchanges.yaml`
+4. Update `factory/client_factory.py` to instantiate it
+5. No changes to services layer needed (factory handles it)
 
-### Validator Location Convention
+### When Adding New Technical Indicator
 
-User correction from session: Validators MUST be in `core/validators/`, NOT `services/validators/`
-- Reason: Validators are cloud-agnostic reusable logic
-- Pattern: Same as `core/interfaces/`, `core/models/`
+1. Create indicator class in `domain/indicators/` (e.g., `volatility.py`)
+2. Inherit from `BaseIndicator` in `domain/indicators/base.py`
+3. Implement `calculate(candles)` and `get_results(candles)` methods
+4. Register in `domain/indicators/registry.py`
+5. Add to `config/providers/indicators.yaml`
+6. No changes to indicator service needed (loads from config)
+
+## Common Gotchas
+
+### 1. Settings Singleton Caching
+```python
+# Problem: YAML configs cached at class level
+# Solution: Delete cache when testing config changes
+if hasattr(Settings, '_yaml_loaded'):
+    delattr(Settings, '_yaml_loaded')
+```
+
+### 2. ClickHouse Sequential Queries
+```python
+# Problem: "Simultaneous queries on single connection"
+# Solution: Use sequential loops, NOT asyncio.gather()
+for item in items:
+    await db.query(...)  # Sequential
+```
+
+### 3. Indicator Warm-Up Periods
+```python
+# Problem: Not enough historical candles for calculation
+# Solution: Check minimum candles before calculating
+min_candles = settings.INDICATOR_SERVICE_MIN_CANDLES  # Default: 20
+if len(candles) < min_candles:
+    return  # Skip calculation
+```
+
+### 4. Docker Network Hostnames
+```python
+# Problem: Using localhost instead of Docker service names
+CLICKHOUSE_HOST = "localhost"  # ❌ Wrong in Docker
+
+# Solution: Use Docker service names from databases.yaml
+CLICKHOUSE_HOST = "clickhouse"  # ✅ Correct
+```
+
+### 5. Hardcoded Configs
+```python
+# ❌ WRONG - Hardcoded values
+timeout = 30000
+limit = 100
+
+# ✅ CORRECT - Use settings from YAML
+timeout = settings.REST_API_TIMEOUT_MS  # From sync.yaml
+limit = settings.SYNC_INITIAL_BACKFILL_LIMIT  # From sync.yaml
+```
 
 ## Grafana Dashboard Management
 
@@ -253,52 +434,17 @@ User correction from session: Validators MUST be in `core/validators/`, NOT `ser
 **After editing dashboard JSON**:
 ```bash
 # Validate JSON syntax
-python3 -m json.tool monitoring/grafana/dashboards/multi-exchange.json
+python3 -m json.tool monitoring/grafana/dashboards/technical-analysis.json
 
 # Restart Grafana to reload
 docker restart trading-grafana
 ```
 
-**Common JSON errors**:
-- Trailing commas in arrays: `]` not `},]`
-- Arrays closed with `}` instead of `]`
-
-## Common Patterns
-
-### Async/Await
-
-All I/O operations are async:
-```python
-async def process_trade(self, trade: Trade) -> None:
-    await self.kinesis.send(trade)
-    await self.clickhouse.insert_trades([trade.to_dict()])
-    await self.redis.set(f"price:{trade.symbol}", trade.price)
-```
-
-### Error Handling with Retry
-
-Use built-in retry decorators (when available) or implement exponential backoff:
-```python
-from core.utils.retry import retry_with_backoff
-
-@retry_with_backoff(max_retries=3)
-async def send_to_kinesis(self, data):
-    # Will auto-retry on failure
-    pass
-```
-
-### Datetime Handling
-
-**IMPORTANT**: Use timezone-aware datetimes:
-```python
-from datetime import datetime, timezone
-
-# ✅ CORRECT
-now = datetime.now(timezone.utc)
-
-# ❌ WRONG (deprecated)
-now = datetime.utcnow()
-```
+**Current Dashboard**: `technical-analysis.json`
+- Panel 1: Price + Indicators (candlestick with SMA/EMA overlays)
+- Panel 2: RSI (0-100 range with overbought/oversold zones)
+- Panel 3: MACD (histogram + signal line)
+- Panel 4: Volume (bar chart)
 
 ## Testing Strategy
 
@@ -308,51 +454,52 @@ now = datetime.utcnow()
 - `@pytest.mark.slow` - Long-running (>10s)
 
 **Integration Test Requirements**:
-1. Start Docker services: `make docker-up`
+1. Start Docker: `make docker-up`
 2. Apply Terraform: `make terraform-apply`
-3. Run tests: `pytest -m integration`
+3. Run tests: `uv run pytest -m integration`
 
-**Test File Naming**:
-- Unit: `tests/unit/test_*.py`
-- Integration: `tests/integration/test_*.py`
+**Test Coverage** (Phase 2):
+- 63+ unit tests passing
+- Integration tests for multi-exchange ingestion
+- Indicator calculation tests (SMA, EMA, RSI, MACD)
 
 ## Environment Files
 
-**DO NOT commit** `.env` files:
-- `.env.example` - Template (committed)
+**DO NOT commit**:
 - `.env` - Local secrets (gitignored)
-- `.env.terraform` - Auto-generated from Terraform outputs
+- `.env.terraform` - Auto-generated from Terraform
+
+**DO commit**:
+- `.env.example` - Template for team
 
 **Terraform Workflow**:
 ```bash
-make terraform-apply              # Creates resources in LocalStack
-# Outputs to .env.terraform
-# Copy values to .env manually
+make terraform-apply  # Creates .env.terraform
+# Copy values to .env manually or use env vars
 ```
 
-## Phase 1 Status
+## Phase Status
 
-**Completed**:
-- ✅ Multi-exchange support (Binance, Coinbase, Kraken)
-- ✅ 20+ symbols per exchange (60 total pairs)
-- ✅ Order book depth data
-- ✅ Data quality validation (spike detection)
-- ✅ YAML-based configuration
-- ✅ Factory pattern
-- ✅ Integration tests (9 test cases)
-- ✅ Grafana multi-exchange dashboard
+**Phase 1** (✅ Completed):
+- Multi-exchange WebSocket ingestion
+- 60+ symbols across Binance, Coinbase, Kraken
+- Data quality validation (spike detection)
+- YAML-based configuration
 
-**Deferred to Phase 6**:
-- Kafka Connect (alternative to Kinesis + manual code)
-- Redis-based buffering (using in-memory for Phase 1-5)
+**Phase 2** (✅ Completed):
+- REST API klines fetching (authoritative candles)
+- Scheduled sync service (every 60s)
+- Technical indicators (SMA, EMA, RSI, MACD)
+- Grafana technical analysis dashboard
+- Initial backfill + catch-up mode
 
-## Project Phases
+**Phase 3** (Next):
+- Trading API (FastAPI)
+- Strategy framework
+- Paper trading simulator
+- RabbitMQ for order execution
 
-See `README.md` for detailed phase breakdown. Key phases:
-
-1. **Phase 1**: Real-time data ingestion ← **CURRENT**
-2. **Phase 2**: Data processing & analytics (OHLCV candles, indicators)
-3. **Phase 3**: Trading API & strategy framework
-4. **Phase 4**: Backtesting engine
-5. **Phase 5**: ML/AI integration
-6. **Phase 6**: Production-ready features (monitoring, HA, multi-region)
+**Phase 4-6** (Future):
+- Backtesting engine
+- ML/AI integration
+- Production monitoring

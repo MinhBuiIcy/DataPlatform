@@ -47,20 +47,30 @@ This platform demonstrates advanced technical skills in:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Local Development Stack
+### Local Development Stack (Phase 2)
 
 ```
-Binance/Coinbase/Kraken WebSocket
+Exchange REST API (ccxt)          Exchange WebSocket (Binance/Coinbase/Kraken)
+    ↓                                          ↓
+Sync Service (every 60s)          Market Data Ingestion Service
+  - Initial backfill: 100 candles   - 60+ symbols, real-time trades
+  - Regular sync: 5 latest candles  - Samples ~4% of trades
+    ↓                                          ↓
+ClickHouse (candles_1m/5m/1h)     Redis (latest_price:{exchange}:{symbol})
+  ReplacingMergeTree, TTL 90d       Real-time signals for Phase 3+
     ↓
-Kafka (Docker) - Data streaming pipeline
+Indicator Service (every 60s + 10s delay)
+  - Catch-up mode: all historical candles on startup
+  - Calculates: SMA 20/50, EMA 12/26, RSI 14, MACD
+  - Stores: ClickHouse (indicators) + Redis (60s TTL)
     ↓
-Lambda Functions (LocalStack) / Python Services
-    ↓
-├── S3 (LocalStack) - Raw data backup
-├── ClickHouse (Docker) - Time-series OLAP
-├── Redis (Docker) - Hot cache
-├── PostgreSQL (Docker) - Metadata
-    ↓
+Grafana (technical-analysis.json)
+  └── 4 panels: Price+Indicators, RSI, MACD, Volume
+```
+
+### Future Stack (Phase 3+)
+
+```
 Trading API (FastAPI) → RabbitMQ → Workers
     ↓
 ├── Strategy Engine
@@ -420,56 +430,72 @@ services/ → domain/ → factory/ → providers/ → core/interfaces/
 
 ---
 
-### 📍 **PHASE 2: Data Processing & Analytics** (Day 3-4)
+### 📍 **PHASE 2: Data Processing & Analytics** ✅ **COMPLETED**
 
 **Goal:** Transform raw ticks into analytical datasets
 
 #### Minimal Features (Required):
 
-- [ ] OHLCV candlesticks (1m, 5m, 15m, 1h)
-- [ ] ClickHouse materialized views for auto-aggregation
-- [ ] Basic technical indicators: SMA(20, 50), EMA(12, 26)
-- [ ] Redis caching for latest prices
-- [ ] Grafana candlestick charts
+- [X] OHLCV candlesticks (1m, 5m, 1h) via REST API
+- [X] ClickHouse candle tables (direct inserts, no MVs)
+- [X] Technical indicators: SMA(20, 50), EMA(12, 26), RSI, MACD
+- [X] Redis caching for latest indicators
+- [X] Grafana technical analysis dashboard
 
-#### Advanced Features (Optional):
+#### Advanced Features (Completed):
 
-- [ ] Advanced indicators: RSI, MACD, Bollinger Bands, ATR
-- [ ] Multiple timeframes (1s, 30s, 4h, 1d)
-- [ ] Volume-weighted indicators (VWAP)
-- [ ] Market microstructure metrics (spread, depth)
-- [ ] Flink streaming jobs for complex aggregations
-- [ ] Real-time correlation analysis
+- [X] Advanced indicators: RSI, MACD with custom implementations
+- [X] Multiple timeframes (1m, 5m, 1h)
+- [X] Initial backfill (100 candles on startup)
+- [X] Catch-up mode (calculate indicators for all historical candles)
+- [X] Sequential processing (avoid ClickHouse connection conflicts)
 
 **Services:**
 
-- Redis (already running)
-- Kafka (already from Phase 1) - Event triggers
-- **NEW**: Python Indicator Service - Event-driven Kafka consumer
-- **NEW**: ClickHouse Kafka Engine - Database → message queue triggers
+- Redis (cache for indicators)
+- ClickHouse (candles + indicators storage)
+- **NEW**: Sync Service - Scheduled REST API klines fetching
+- **NEW**: Indicator Service - Scheduled indicator calculation
 
-**Architecture Notes:**
+**Architecture: Industry Standard - Scheduled Jobs**
 
-**Indicator Calculation Approach (Phase 2)**:
-- **Event-driven**: ClickHouse → Kafka → Python service (implemented from Day 1)
-- ClickHouse Materialized View triggers Kafka event when new candle created
-- Python Kafka consumer calculates indicators instantly (<1s latency)
-- Writes results to ClickHouse + caches in Redis
-- **Latency**: <1 second (sub-second real-time)
-- **Why event-driven in Phase 2?**:
-  - Kafka infrastructure already exists (Phase 1)
-  - ClickHouse Kafka Engine = 1 SQL statement
-  - Production-ready from start, no refactoring needed Phase 3+
-  - Industry standard for time-series data platforms
+```
+Exchange REST API (authoritative OHLCV data)
+   ↓
+Sync Service (every 60 seconds)
+   ├─ Fetches latest klines via ccxt
+   ├─ Initial backfill: 100 candles on startup
+   ├─ Regular sync: 5 latest candles
+   └─ Stores in ClickHouse (candles_1m, 5m, 1h)
+   ↓
+Indicator Service (every 60 seconds + 10s delay)
+   ├─ Reads candles from ClickHouse
+   ├─ Catch-up mode: Process all historical candles on startup
+   ├─ Calculates: SMA 20/50, EMA 12/26, RSI, MACD
+   ├─ Stores in ClickHouse (indicators table)
+   └─ Caches in Redis (60s TTL)
+   ↓
+Grafana Dashboard
+   └─ 4-panel layout: Price+Indicators, RSI, MACD, Volume
+```
+
+**Key Design Decisions:**
+
+- **REST API over WebSocket**: Exchange REST API provides authoritative, complete OHLCV data (WebSocket only captures ~4% of trades via sampling)
+- **Scheduled jobs over event-driven**: Simple, predictable, easier to debug than Kafka consumers
+- **Sequential processing**: Avoid ClickHouse single-connection conflicts (clickhouse_driver limitation)
+- **Catch-up mode**: Calculate indicators for all backfilled data on startup
+- **No Materialized Views**: Direct inserts from REST API, simpler schema
 
 **Tech Showcase:**
 
-- ClickHouse materialized views + Kafka Engine integration
-- Event-driven microservices (Kafka consumer patterns)
-- Sub-second end-to-end latency (trade → indicator calculated)
-- **Closed candle validation**: Prevent calculating on incomplete data
-- TA-Lib integration for industry-standard indicators
-- Redis-first architecture (low-latency caching)
+- **ccxt Integration**: Unified exchange REST API abstraction (Binance, Coinbase, Kraken)
+- **BaseExchangeRestAPI Pattern**: Cloud-agnostic REST API abstraction (mirrors WebSocket pattern)
+- **Scheduled Job Architecture**: 60-second intervals, 10-second offset between services
+- **ClickHouse Optimization**: Sequential queries to avoid connection conflicts
+- **Custom Indicator Implementation**: SMA, EMA, RSI, MACD without TA-Lib dependency
+- **Grafana Advanced Visualization**: Candlestick charts with indicator overlays, styled panels
+- **Initial Backfill + Catch-up**: 100 candles fetched on startup, all historical data processed
 
 ---
 
@@ -873,12 +899,19 @@ docker-compose ps
 docker-compose logs -f localstack
 ```
 
-### 3. Run Market Data Ingestion
+### 3. Run Services (Phase 2)
+
+Run in this order to ensure proper data flow:
 
 ```bash
-cd services/market-data-ingestion
-pip install -r requirements.txt
-python main.py
+# Terminal 1: Market Data Ingestion (WebSocket → Redis signals)
+uv run python services/market_data_ingestion/main.py
+
+# Terminal 2: Sync Service (REST API → ClickHouse candles, every 60s)
+uv run python services/sync_service/main.py
+
+# Terminal 3: Indicator Service (ClickHouse → Calculate → Redis/ClickHouse, every 60s)
+uv run python services/indicator_service/main.py
 ```
 
 ### 4. Access Dashboards
@@ -982,14 +1015,14 @@ helm install trading ./helm/trading-platform
 
 ## 📈 Project Milestones
 
-| Phase   | Duration | Can Demo               | Technical Highlights         |
-| ------- | -------- | ---------------------- | ---------------------------- |
-| Phase 1 | 1-2 days | ✅ Real-time prices    | WebSocket, Kafka, ClickHouse |
-| Phase 2 | 1-2 days | ✅ Charts + indicators | Materialized views, caching  |
-| Phase 3 | 2 days   | ✅ Working strategy    | FastAPI, event-driven arch   |
-| Phase 4 | 2-3 days | ✅ Backtest results    | Vectorized computing, stats  |
-| Phase 5 | 2-3 days | ✅ ML predictions      | LSTM, feature engineering    |
-| Phase 6 | 2-3 days | ✅ Production system   | Monitoring, orchestration    |
+| Phase   | Status      | Can Demo               | Technical Highlights                     |
+| ------- | ----------- | ---------------------- | ---------------------------------------- |
+| Phase 1 | ✅ Complete | Real-time prices       | WebSocket, multi-exchange, ClickHouse    |
+| Phase 2 | ✅ Complete | Charts + indicators    | REST API sync, scheduled jobs, SMA/EMA/RSI/MACD |
+| Phase 3 | Planned     | Working strategy       | FastAPI, RabbitMQ, event-driven arch     |
+| Phase 4 | Planned     | Backtest results       | Vectorized computing, stats              |
+| Phase 5 | Planned     | ML predictions         | LSTM, feature engineering                |
+| Phase 6 | Planned     | Production system      | Monitoring, orchestration                |
 
 **Total:** ~2 weeks for full platform
 
