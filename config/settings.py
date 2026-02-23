@@ -50,6 +50,8 @@ class Settings(BaseSettings):
             Settings._database_config = load_yaml_safe("config/providers/databases.yaml")
             Settings._storage_config = load_yaml_safe("config/providers/storage.yaml")
             Settings._indicators_config = load_yaml_safe("config/providers/indicators.yaml")
+            Settings._sync_config = load_yaml_safe("config/providers/sync.yaml")
+            Settings._exchanges_config = load_yaml_safe("config/providers/exchanges.yaml")
             Settings._yaml_loaded = True
 
     # ============================================
@@ -76,6 +78,44 @@ class Settings(BaseSettings):
 
     # LocalStack
     LOCALSTACK_AUTH_TOKEN: str | None = Field(default=None)
+
+    # ============================================
+    # CLIENT QUEUE SETTINGS (from YAML)
+    # ============================================
+    @property
+    def STREAM_QUEUE_SIZE(self) -> int:
+        """Stream client queue size from streaming.yaml"""
+        return self._streaming_config.get("queue", {}).get("size", 5000)
+
+    @property
+    def STREAM_WORKERS(self) -> int:
+        """Stream client worker pool size from streaming.yaml"""
+        return self._streaming_config.get("queue", {}).get("workers", 10)
+
+    @property
+    def DB_QUEUE_SIZE(self) -> int:
+        """Database client queue size from databases.yaml"""
+        return self._database_config.get("queue", {}).get("size", 2000)
+
+    @property
+    def DB_WORKERS(self) -> int:
+        """Database client worker pool size from databases.yaml"""
+        return self._database_config.get("queue", {}).get("workers", 3)
+
+    @property
+    def DB_BATCH_SIZE(self) -> int:
+        """Database client batch size from databases.yaml"""
+        return self._database_config.get("queue", {}).get("batch_size", 100)
+
+    @property
+    def CACHE_QUEUE_SIZE(self) -> int:
+        """Cache client queue size from databases.yaml"""
+        return self._database_config.get("redis", {}).get("queue", {}).get("size", 1000)
+
+    @property
+    def CACHE_WORKERS(self) -> int:
+        """Cache client worker pool size from databases.yaml"""
+        return self._database_config.get("redis", {}).get("queue", {}).get("workers", 2)
 
     # ============================================
     # STREAMING - Kafka/Kinesis (from YAML)
@@ -123,26 +163,9 @@ class Settings(BaseSettings):
 
     # ============================================
     # UNIFIED STREAM/TOPIC NAMES (Cloud-agnostic)
+    # Phase 2: WebSocket → Redis only (no streaming to Kafka/Kinesis)
+    # Kafka infrastructure kept for Phase 3+ (strategies)
     # ============================================
-    @property
-    def STREAM_MARKET_TRADES(self) -> str:
-        """
-        Cloud-agnostic stream/topic name for market trades
-        Returns Kafka topic if opensource, Kinesis stream if aws/localstack
-        """
-        if self.CLOUD_PROVIDER.lower() == "opensource":
-            return self.KAFKA_TOPIC_MARKET_TRADES
-        return self.KINESIS_STREAM_MARKET_TRADES
-
-    @property
-    def STREAM_ORDER_BOOKS(self) -> str:
-        """
-        Cloud-agnostic stream/topic name for order books
-        Returns Kafka topic if opensource, Kinesis stream if aws/localstack
-        """
-        if self.CLOUD_PROVIDER.lower() == "opensource":
-            return self.KAFKA_TOPIC_ORDER_BOOKS
-        return self.KINESIS_STREAM_MARKET_TRADES  # Currently using same stream for both
 
     # ============================================
     # CLICKHOUSE (from YAML + .env)
@@ -171,6 +194,19 @@ class Settings(BaseSettings):
     def CLICKHOUSE_USER(self) -> str:
         """ClickHouse user from databases.yaml"""
         return self._database_config.get("clickhouse", {}).get("user", "trading_user")
+
+    @property
+    def CLICKHOUSE_POOL_SIZE(self) -> int:
+        """
+        ClickHouse connection pool size from databases.yaml.
+
+        Should be >= DB_WORKERS for optimal performance.
+        Each worker needs a connection when executing queries.
+        Defaults to DB_WORKERS if not specified.
+        """
+        return self._database_config.get("clickhouse", {}).get(
+            "pool_size", self.DB_WORKERS
+        )
 
     # ClickHouse password from .env (secret)
     CLICKHOUSE_PASSWORD: str = Field(default="trading_pass")
@@ -302,6 +338,131 @@ class Settings(BaseSettings):
     def INDICATOR_ENABLE_GAP_FILLING(self) -> bool:
         """Whether to enable gap filling"""
         return self._indicators_config.get("settings", {}).get("enable_gap_filling", True)
+
+    # ============================================
+    # WEBSOCKET (from exchanges.yaml)
+    # ============================================
+    @property
+    def WS_QUEUE_MAX_SIZE(self) -> int:
+        """Max buffered messages per exchange before dropping"""
+        return self._exchanges_config.get("websocket", {}).get("queue_max_size", 10000)
+
+    @property
+    def WS_CONSUMER_WORKERS(self) -> int:
+        """Number of parallel consumer workers per exchange"""
+        return self._exchanges_config.get("websocket", {}).get("consumer_workers", 3)
+
+    @property
+    def WS_PING_INTERVAL(self) -> int | None:
+        """Client ping interval in seconds, None to disable"""
+        val = self._exchanges_config.get("websocket", {}).get("ping_interval", 60)
+        return None if val is None else int(val)
+
+    @property
+    def WS_PING_TIMEOUT(self) -> int | None:
+        """Max wait for pong before reconnect in seconds"""
+        val = self._exchanges_config.get("websocket", {}).get("ping_timeout", 120)
+        return None if val is None else int(val)
+
+    @property
+    def WS_MAX_MESSAGE_SIZE(self) -> int:
+        """Max WebSocket frame size in bytes"""
+        mb = self._exchanges_config.get("websocket", {}).get("max_message_size_mb", 10)
+        return int(mb) * 1024 * 1024
+
+    @property
+    def WS_ORDERBOOK_SAMPLE_INTERVAL_MS(self) -> int:
+        """Pre-filter interval for orderbook messages (ms). Keep 1 per symbol per interval."""
+        return self._exchanges_config.get("websocket", {}).get("orderbook_sample_interval_ms", 1000)
+
+    # ============================================
+    # SYNC SERVICE (from sync.yaml)
+    # ============================================
+    @property
+    def SYNC_ENABLED(self) -> bool:
+        """Whether sync service is enabled"""
+        return self._sync_config.get("sync", {}).get("enabled", True)
+
+    @property
+    def SYNC_INTERVAL_SECONDS(self) -> int:
+        """Sync interval in seconds"""
+        return self._sync_config.get("sync", {}).get("interval_seconds", 60)
+
+    @property
+    def SYNC_TIMEFRAMES(self) -> list[str]:
+        """Timeframes to sync from sync.yaml"""
+        return self._sync_config.get("sync", {}).get("timeframes", ["1m", "5m", "1h"])
+
+    @property
+    def SYNC_FETCH_LIMIT(self) -> int:
+        """Number of candles to fetch per sync"""
+        return self._sync_config.get("sync", {}).get("fetch_limit", 5)
+
+    @property
+    def SYNC_MAX_CONCURRENT(self) -> int:
+        """Max concurrent sync tasks per cycle"""
+        return self._sync_config.get("sync", {}).get("max_concurrent_syncs", 10)
+
+    @property
+    def SYNC_RATE_LIMIT_DELAY_MS(self) -> int:
+        """Delay between exchange API calls"""
+        return self._sync_config.get("sync", {}).get("rate_limit_delay_ms", 500)
+
+    @property
+    def SYNC_INITIAL_BACKFILL_LIMIT(self) -> int:
+        """Number of candles to fetch on initial backfill"""
+        return self._sync_config.get("sync", {}).get("initial_backfill_limit", 100)
+
+    # ============================================
+    # REST API (from sync.yaml)
+    # ============================================
+    @property
+    def REST_API_ENABLE_RATE_LIMIT(self) -> bool:
+        """Enable ccxt built-in rate limiting"""
+        return self._sync_config.get("rest_api", {}).get("enable_rate_limit", True)
+
+    @property
+    def REST_API_TIMEOUT_MS(self) -> int:
+        """Request timeout in milliseconds"""
+        return self._sync_config.get("rest_api", {}).get("timeout_ms", 30000)
+
+    @property
+    def REST_API_RETRY_COUNT(self) -> int:
+        """Number of retries on failure"""
+        return self._sync_config.get("rest_api", {}).get("retry_count", 3)
+
+    @property
+    def REST_API_RETRY_DELAY_MS(self) -> int:
+        """Delay between retries"""
+        return self._sync_config.get("rest_api", {}).get("retry_delay_ms", 1000)
+
+    # ============================================
+    # INDICATOR SERVICE (from indicators.yaml)
+    # ============================================
+    @property
+    def INDICATOR_SERVICE_INTERVAL_SECONDS(self) -> int:
+        """Indicator service run interval"""
+        return self._indicators_config.get("service", {}).get("interval_seconds", 60)
+
+    @property
+    def INDICATOR_SERVICE_INITIAL_DELAY_SECONDS(self) -> int:
+        """Initial delay before starting indicator service"""
+        return self._indicators_config.get("service", {}).get("initial_delay_seconds", 10)
+
+    @property
+    def INDICATOR_SERVICE_CATCH_UP_ENABLED(self) -> bool:
+        """Whether catch-up mode is enabled"""
+        return self._indicators_config.get("service", {}).get("catch_up_enabled", True)
+
+    @property
+    def INDICATOR_SERVICE_CATCH_UP_LIMIT(self) -> int:
+        """Max candles to process in catch-up mode"""
+        return self._indicators_config.get("service", {}).get("catch_up_limit", 1000)
+
+    @property
+    def INDICATOR_SERVICE_MIN_CANDLES(self) -> int:
+        """Minimum candles required for calculation"""
+        return self._indicators_config.get("service", {}).get("min_candles", 20)
 
 
 # Singleton pattern

@@ -6,6 +6,13 @@
 #   - CLOUD_PROVIDER=aws/localstack → Use Kinesis
 
 # ============================================
+# QUEUE SETTINGS (Internal client queues)
+# ============================================
+queue:
+  size: 5000              # Internal queue size for enqueue_record()
+  workers: 10             # Worker pool size (Kafka is fast with acks=0)
+
+# ============================================
 # KAFKA (Open-source, Production-ready)
 # ============================================
 kafka:

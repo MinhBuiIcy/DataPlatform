@@ -6,6 +6,15 @@
 #   - base: Normalized base asset (for multi-exchange comparison)
 #   - quote: Quote currency
 
+# WebSocket processing settings (shared across all exchanges)
+websocket:
+  queue_max_size: 10000          # Max buffered messages before dropping
+  consumer_workers: 5             # Parallel workers processing callbacks
+  ping_interval: 60              # Client ping interval (seconds), null to disable
+  ping_timeout: 120              # Max wait for pong before reconnect (seconds)
+  max_message_size_mb: 10        # Max WebSocket frame size in MB
+  orderbook_sample_interval_ms: 1000  # Pre-filter: keep 1 orderbook per symbol per interval
+
 exchanges:
   binance:
     enabled: true
@@ -40,8 +49,8 @@ exchanges:
       - native: DOTUSDT
         base: DOT
         quote: USDT
-      - native: MATICUSDT
-        base: MATIC
+      - native: POLUSDT
+        base: POL
         quote: USDT
       - native: AVAXUSDT
         base: AVAX
@@ -83,7 +92,7 @@ exchanges:
       trades: true
       orderbook: true
       orderbook_depth: 10
-      orderbook_update_ms: 100
+      orderbook_update_ms: 1000
 
     rate_limits:
       connections_per_ip: 300
@@ -117,9 +126,10 @@ exchanges:
       - native: DOT-USD
         base: DOT
         quote: USD
-      - native: MATIC-USD
-        base: MATIC
+      - native: POL-USD
+        base: POL
         quote: USD
+      # MATIC-USD removed - migrated to POL-USD in Sept 2024
       - native: AVAX-USD
         base: AVAX
         quote: USD
@@ -172,7 +182,8 @@ exchanges:
     websocket_url: "wss://ws.kraken.com/"
 
     symbols:
-      - native: XBT/USD  # Kraken uses XBT instead of BTC
+      # Note: ccxt normalizes Kraken symbols (XBT→BTC, XDG→DOGE)
+      - native: BTC/USD  # Kraken BTC (ccxt normalized)
         base: BTC
         quote: USD
       - native: ETH/USD
@@ -187,15 +198,13 @@ exchanges:
       - native: ADA/USD
         base: ADA
         quote: USD
-      - native: XDG/USD  # Kraken uses XDG instead of DOGE
+      - native: DOGE/USD  # Kraken DOGE (ccxt normalized)
         base: DOGE
         quote: USD
       - native: DOT/USD
         base: DOT
         quote: USD
-      - native: MATIC/USD
-        base: MATIC
-        quote: USD
+      # MATIC/USD removed - not available
       - native: AVAX/USD
         base: AVAX
         quote: USD

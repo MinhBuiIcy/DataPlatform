@@ -1,0 +1,41 @@
+# Sync Service Configuration
+# Fetches latest klines from exchange REST API
+
+sync:
+  enabled: true
+
+  # Sync interval (seconds)
+  interval_seconds: 60
+
+  # Timeframes to sync (from exchange REST API)
+  timeframes:
+    - "1m"
+    - "5m"
+    - "1h"
+
+  # Number of latest candles to fetch per sync (ensures no gaps)
+  fetch_limit: 5
+
+  # Initial backfill on startup (enough for SMA_50, MACD, etc.)
+  initial_backfill_limit: 100
+
+  # Max concurrent sync tasks per cycle
+  max_concurrent_syncs: 10
+
+  # Delay between exchange API calls (milliseconds)
+  rate_limit_delay_ms: 500
+
+# ============================================
+# REST API SETTINGS (ccxt configuration)
+# ============================================
+
+rest_api:
+  # Rate limiting
+  enable_rate_limit: true  # Enable ccxt built-in rate limiting
+
+  # Timeout
+  timeout_ms: 30000  # Request timeout (30 seconds)
+
+  # Retry logic
+  retry_count: 3  # Number of retries on failure
+  retry_delay_ms: 1000  # Delay between retries

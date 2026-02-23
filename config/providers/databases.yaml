@@ -3,6 +3,14 @@
 # Passwords are in .env (gitignored)
 
 # ============================================
+# QUEUE SETTINGS (Internal client queues)
+# ============================================
+queue:
+  size: 2000              # Internal queue size for insert operations
+  workers: 3              # Worker pool size (fewer workers, already batches)
+  batch_size: 100         # Batch size for inserts
+
+# ============================================
 # CLICKHOUSE - Time-Series OLAP Database
 # ============================================
 clickhouse:
@@ -21,6 +29,11 @@ clickhouse:
   # Performance
   max_threads: 4
   max_memory_usage_gb: 2
+
+  # Connection pooling
+  # Pool size should be >= DB_WORKERS for optimal throughput
+  # Each worker needs a connection when executing queries
+  pool_size: 3  # Default: same as DB_WORKERS (from queue.workers)
 
 # ============================================
 # POSTGRESQL - Relational Database
@@ -60,3 +73,8 @@ redis:
   # Performance
   max_connections: 50
   socket_timeout_sec: 5
+
+  # Queue settings (internal client queue)
+  queue:
+    size: 1000            # Internal queue size for enqueue_set operations
+    workers: 2            # Worker pool size (low volume)

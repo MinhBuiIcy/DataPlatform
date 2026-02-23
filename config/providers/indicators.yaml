@@ -54,3 +54,19 @@ settings:
 
   # Performance
   calculation_timeout_ms: 5000  # Max time for all indicator calculations
+
+# ============================================
+# INDICATOR SERVICE SETTINGS (Phase 2)
+# ============================================
+
+service:
+  # Scheduling
+  interval_seconds: 60  # Run every 60 seconds
+  initial_delay_seconds: 10  # Wait for Sync Service to backfill first
+
+  # Catch-up mode (process historical candles on startup)
+  catch_up_enabled: true
+  catch_up_limit: 1000  # Max candles to process per symbol
+
+  # Minimum candles required for calculation
+  min_candles: 20  # Need at least 20 candles for indicators
