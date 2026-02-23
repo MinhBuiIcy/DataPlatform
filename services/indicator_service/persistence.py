@@ -17,7 +17,7 @@ Architecture:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from core.interfaces.cache import BaseCacheClient
 from core.interfaces.database import BaseTimeSeriesDB
@@ -78,7 +78,7 @@ class IndicatorPersistence:
                 "indicators": indicators,
             }
 
-            await self.cache.set(key, json.dumps(value), ttl_seconds=60)
+            await self.cache.set(key, json.dumps(value), ttl=timedelta(seconds=60))
             logger.debug(f"✓ Cached {len(indicators)} indicators for {symbol}")
 
         except Exception as e:

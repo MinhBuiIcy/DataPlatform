@@ -5,7 +5,7 @@ Tests simplified Redis-only functionality.
 """
 
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import AsyncMock
@@ -112,7 +112,7 @@ class TestStreamProcessorProcessTrade:
         assert call_args[0][1] == "50000.00"
 
         # Check TTL
-        assert call_args[1]["ttl"] == 60
+        assert call_args[1]["ttl"] == timedelta(seconds=60)
 
     @pytest.mark.asyncio
     async def test_process_trade_does_not_write_to_clickhouse(
@@ -169,7 +169,7 @@ class TestStreamProcessorProcessOrderbook:
         assert "mid_price" in data
 
         # Check TTL
-        assert call_args[1]["ttl"] == 60
+        assert call_args[1]["ttl"] == timedelta(seconds=60)
 
 
 class TestStreamProcessorClose:

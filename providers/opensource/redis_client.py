@@ -7,6 +7,7 @@ NEW (Phase 2 WebSocket Stability): Uses queued interface pattern from BaseCacheC
 """
 
 import logging
+from datetime import timedelta
 
 from redis.asyncio import Redis
 
@@ -57,14 +58,14 @@ class RedisClient(BaseCacheClient):
             logger.error(f"✗ Failed to connect to Redis: {e}")
             raise
 
-    async def _set_impl(self, key: str, value: str, ttl_seconds: int | None) -> None:
+    async def _set_impl(self, key: str, value: str, ttl: timedelta | None) -> None:
         """
         Actual Redis set (called by worker from BaseCacheClient)
 
         Args:
             key: Redis key
             value: String value
-            ttl_seconds: TTL in seconds (int), not timedelta
+            ttl: Optional TTL as timedelta
 
         This does the real I/O. Called in background by worker pool.
         """
@@ -72,8 +73,8 @@ class RedisClient(BaseCacheClient):
             raise RuntimeError("Redis client not connected")
 
         try:
-            if ttl_seconds:
-                await self.client.set(key, value, ex=ttl_seconds)
+            if ttl:
+                await self.client.set(key, value, ex=int(ttl.total_seconds()))
             else:
                 await self.client.set(key, value)
         except Exception as e:

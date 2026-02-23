@@ -59,7 +59,7 @@ class BaseCacheClient(ABC):
             f"Started {settings.CACHE_WORKERS} cache workers (queue size: {settings.CACHE_QUEUE_SIZE})"
         )
 
-    def enqueue_set(self, key: str, value: str, ttl_seconds: int | None = None) -> bool:
+    def enqueue_set(self, key: str, value: str, ttl: timedelta | None = None) -> bool:
         """
         Enqueue cache set operation (SYNC, NON-BLOCKING)
 
@@ -68,7 +68,7 @@ class BaseCacheClient(ABC):
         Args:
             key: Cache key
             value: Value to set
-            ttl_seconds: Optional TTL in seconds (int), not timedelta
+            ttl: Optional TTL as timedelta
 
         Returns:
             True if queued, False if dropped
@@ -77,7 +77,7 @@ class BaseCacheClient(ABC):
             raise RuntimeError("Cache client not connected")
 
         try:
-            self._queue.put_nowait(("set", key, value, ttl_seconds))
+            self._queue.put_nowait(("set", key, value, ttl))
             return True
         except asyncio.QueueFull:
             # Track drop metrics + rate
@@ -145,18 +145,18 @@ class BaseCacheClient(ABC):
             Value as string, or None if not found
         """
 
-    async def set(self, key: str, value: str, ttl_seconds: int | None = None) -> bool:
+    async def set(self, key: str, value: str, ttl: timedelta | None = None) -> bool:
         """
         Set key-value with optional TTL.
 
         Args:
             key: Cache key
             value: String value
-            ttl_seconds: TTL in seconds (int), not timedelta
+            ttl: Optional TTL as timedelta
 
         Note: Queues operation for background worker (non-blocking)
         """
-        return self.enqueue_set(key, value, ttl_seconds)
+        return self.enqueue_set(key, value, ttl)
 
     @abstractmethod
     async def hset(self, name: str, key: str, value: str) -> int:
