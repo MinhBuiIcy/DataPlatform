@@ -6,11 +6,11 @@ Tests Redis cache data format and consistency.
 
 import json
 import os
+
 import pytest
 import redis as redis_lib
 
-from config.settings import get_settings, Settings
-
+from config.settings import Settings, get_settings
 
 # Set environment variables for localhost
 os.environ['CLICKHOUSE_HOST'] = 'localhost'
@@ -62,15 +62,15 @@ def test_redis_cache_format(redis_client):
             redis_price = float(redis_str)
             print(f"  ✓ {test_key_str}: ${redis_price}")
             assert redis_price > 0, "Price should be positive"
-        except (ValueError, TypeError) as e:
+        except (ValueError, TypeError):
             # Fallback: Try parsing as JSON (some tests might write JSON)
             try:
                 redis_json = json.loads(redis_str)
                 redis_price = float(redis_json.get("price", 0))
                 print(f"  ✓ {test_key_str}: ${redis_price} (JSON format)")
                 assert redis_price > 0, "Price should be positive"
-            except:
-                raise AssertionError(f"Invalid Redis price format: {redis_str}")
+            except Exception as e:
+                raise AssertionError(f"Invalid Redis price format: {redis_str}") from e
     else:
         pytest.skip("No latest_price keys found (WebSocket service not running)")
 

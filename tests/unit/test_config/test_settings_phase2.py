@@ -4,8 +4,6 @@ Unit tests for Phase 2 settings configuration
 Tests YAML config loading for sync and indicator service settings.
 """
 
-from datetime import timedelta
-from unittest.mock import patch
 
 import pytest
 
@@ -162,8 +160,7 @@ class TestSettingsResetForTesting:
     def test_yaml_loaded_flag_reset(self):
         """Test resetting _yaml_loaded flag for test isolation"""
         # Get initial settings
-        settings = get_settings()
-        initial_timeframes = settings.SYNC_TIMEFRAMES
+        get_settings()
 
         # Reset the class-level cache flag
         if hasattr(Settings, "_yaml_loaded"):

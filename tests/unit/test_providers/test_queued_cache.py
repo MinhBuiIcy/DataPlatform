@@ -11,7 +11,6 @@ Tests the queue + worker pattern for cache clients (Redis):
 """
 
 import asyncio
-import logging
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -217,7 +216,7 @@ class TestCacheClientDropRateTracking:
 
         # Drop multiple operations
         for i in range(15):
-            result = small_queue_cache.enqueue_set(f"drop{i}", "value")
+            small_queue_cache.enqueue_set(f"drop{i}", "value")
             # Some may queue if workers drain, but we're testing the ones that drop
 
         # Verify drop tracking worked

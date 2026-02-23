@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -187,13 +188,11 @@ class BaseStreamProducer(ABC):
             try:
                 # Give workers reasonable time to drain queue
                 await asyncio.wait_for(task, timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Stream worker didn't finish in 10s, cancelling")
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
 
         self._worker_tasks.clear()
 

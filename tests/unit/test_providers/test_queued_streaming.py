@@ -308,8 +308,6 @@ class TestStreamProducerShutdown:
     @pytest.mark.asyncio
     async def test_close_sends_sentinels_to_workers(self, connected_producer):
         """Verify close() sends sentinel to each worker"""
-        num_workers = len(connected_producer._worker_tasks)
-
         await connected_producer.close()
 
         # Queue should have received one sentinel per worker

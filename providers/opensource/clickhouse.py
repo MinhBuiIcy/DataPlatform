@@ -8,6 +8,7 @@ wrapped in asyncio.to_thread() to avoid blocking the event loop.
 """
 
 import asyncio
+import contextlib
 import logging
 from typing import Any
 
@@ -167,11 +168,8 @@ class ClickHouseClient(BaseTimeSeriesDB):
         finally:
             if poisoned:
                 # Attempt to recover from poison
-                try:
-                    # Close broken connection
+                with contextlib.suppress(Exception):
                     conn.disconnect()
-                except Exception:
-                    pass  # Best effort, ignore errors
 
                 try:
                     # Try to create a new connection
@@ -231,10 +229,8 @@ class ClickHouseClient(BaseTimeSeriesDB):
 
         finally:
             if poisoned:
-                try:
+                with contextlib.suppress(Exception):
                     conn.disconnect()
-                except:
-                    pass
                 try:
                     conn = await self._create_connection()
                     logger.warning("Replaced poisoned connection")
@@ -299,10 +295,8 @@ class ClickHouseClient(BaseTimeSeriesDB):
 
         finally:
             if poisoned:
-                try:
+                with contextlib.suppress(Exception):
                     conn.disconnect()
-                except:
-                    pass
                 try:
                     conn = await self._create_connection()
                     logger.warning("Replaced poisoned connection")
@@ -376,10 +370,8 @@ class ClickHouseClient(BaseTimeSeriesDB):
 
         finally:
             if poisoned:
-                try:
+                with contextlib.suppress(Exception):
                     conn.disconnect()
-                except:
-                    pass
                 try:
                     conn = await self._create_connection()
                     logger.warning("Replaced poisoned connection")
@@ -473,10 +465,8 @@ class ClickHouseClient(BaseTimeSeriesDB):
 
         finally:
             if poisoned:
-                try:
+                with contextlib.suppress(Exception):
                     conn.disconnect()
-                except:
-                    pass
                 try:
                     conn = await self._create_connection()
                     logger.warning("Replaced poisoned connection")
@@ -543,10 +533,8 @@ class ClickHouseClient(BaseTimeSeriesDB):
 
         finally:
             if poisoned:
-                try:
+                with contextlib.suppress(Exception):
                     conn.disconnect()
-                except:
-                    pass
                 try:
                     conn = await self._create_connection()
                     logger.warning("Replaced poisoned connection")
@@ -571,7 +559,7 @@ class ClickHouseClient(BaseTimeSeriesDB):
                     conn = await asyncio.wait_for(self._pool.get(), timeout=1.0)
                     conn.disconnect()
                     closed_count += 1
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     break
                 except Exception as e:
                     logger.warning(f"Error closing connection: {e}")

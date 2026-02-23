@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -275,13 +276,11 @@ class BaseTimeSeriesDB(ABC):
         for task in self._worker_tasks:
             try:
                 await asyncio.wait_for(task, timeout=15.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("DB worker didn't finish in 15s, cancelling")
                 task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await task
-                except asyncio.CancelledError:
-                    pass
 
         self._worker_tasks.clear()
 

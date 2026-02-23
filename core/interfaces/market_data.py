@@ -7,6 +7,7 @@ Cloud-agnostic interfaces for:
 """
 
 import asyncio
+import contextlib
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -183,10 +184,8 @@ class BaseExchangeWebSocket(ABC):
             if not task.done():
                 task.cancel()
         for task in self._consumer_tasks:
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await task
-            except asyncio.CancelledError:
-                pass
         self._consumer_tasks.clear()
 
     async def _notify_trade(self, trade: Trade) -> None:
@@ -331,7 +330,6 @@ class BaseExchangeRestAPI(ABC):
             ExchangeAPIError: If API request fails
             RateLimitError: If rate limit exceeded
         """
-        pass
 
     @abstractmethod
     async def fetch_latest_klines(
@@ -354,7 +352,6 @@ class BaseExchangeRestAPI(ABC):
         Raises:
             ExchangeAPIError: If API request fails
         """
-        pass
 
     @abstractmethod
     def get_supported_timeframes(self) -> list[str]:
@@ -364,9 +361,7 @@ class BaseExchangeRestAPI(ABC):
         Returns:
             List of timeframe strings (e.g., ["1m", "5m", "1h", "1d"])
         """
-        pass
 
     @abstractmethod
     async def close(self) -> None:
         """Close API client connections and cleanup resources"""
-        pass
