@@ -100,6 +100,30 @@ services:
     restart: unless-stopped
 
   # ============================================
+  # CLICKHOUSE INIT - Schema & Migrations
+  # ============================================
+  clickhouse-init:
+    image: clickhouse/clickhouse-server:24.1
+    container_name: trading-clickhouse-init
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - trading-net
+    volumes:
+      - ./clickhouse/init.sql:/init/init.sql:ro
+      - ./clickhouse/migrations:/migrations:ro
+      - ./clickhouse/init-and-migrate.sh:/init-and-migrate.sh:ro
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: 9000
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-trading_user}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-trading_pass}
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-trading}
+    entrypoint: ["bash", "/init-and-migrate.sh"]
+    restart: "no"
+
+  # ============================================
   # REDIS - In-Memory Cache
   # ============================================
   redis:
@@ -200,8 +224,8 @@ services:
     networks:
       - trading-net
     depends_on:
-      clickhouse:
-        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       prometheus:
@@ -305,11 +329,12 @@ services:
       - ../../providers:/app/providers:ro
       - ../../services/market_data_ingestion:/app/services/market_data_ingestion:ro
       - ../../config:/app/config:ro  # Config last to ensure proper override
+      - ../../data/logs:/app/data/logs  # Error log files (RotatingFileHandler)
     networks:
       - trading-net
     depends_on:
-      clickhouse:
-        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       kafka:
@@ -317,6 +342,11 @@ services:
       kafka-init:
         condition: service_completed_successfully
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles:
       - services  # Start with: docker-compose --profile services up
 
@@ -346,11 +376,12 @@ services:
       - ../../factory:/app/factory:ro
       - ../../providers:/app/providers:ro
       - ../../services/indicator_service:/app/services/indicator_service:ro
+      - ../../data/logs:/app/data/logs  # Error log files (RotatingFileHandler)
     networks:
       - trading-net
     depends_on:
-      clickhouse:
-        condition: service_healthy
+      clickhouse-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       kafka:
@@ -358,6 +389,46 @@ services:
       kafka-init:
         condition: service_completed_successfully
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - services  # Start with: docker-compose --profile services up
+
+  # ============================================
+  # BACKFILL SERVICE (Phase 2)
+  # ============================================
+  sync-service:
+    build:
+      context: ../..
+      dockerfile: services/sync_service/Dockerfile
+    container_name: trading-sync-service
+    hostname: sync-service
+    env_file:
+      - ../../.env  # Load secrets from .env
+    environment:
+      - CLOUD_PROVIDER=${CLOUD_PROVIDER:-opensource}
+    volumes:
+      - ../../config:/app/config:ro
+      - ../../core:/app/core:ro
+      - ../../domain:/app/domain:ro
+      - ../../factory:/app/factory:ro
+      - ../../providers:/app/providers:ro
+      - ../../services/sync_service:/app/services/sync_service:ro
+      - ../../data/logs:/app/data/logs  # Error log files (RotatingFileHandler)
+    networks:
+      - trading-net
+    depends_on:
+      clickhouse-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     profiles:
       - services  # Start with: docker-compose --profile services up
 
